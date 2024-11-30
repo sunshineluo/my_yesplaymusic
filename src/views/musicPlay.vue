@@ -112,8 +112,13 @@
                   </div>
                   <div class="buttons">
                     <button-icon
-                      :title="$t('player.like')"
-                      @click.native="likeATrack(player.currentTrack.id)"
+                      :class="{ disabled: heartDisabled }"
+                      :title="
+                        heartDisabled
+                          ? $t('player.noAllowCauseLocal')
+                          : $t('player.like')
+                      "
+                      @click.native="likeTrack"
                     >
                       <svg-icon
                         :icon-class="
@@ -122,19 +127,16 @@
                       />
                     </button-icon>
                     <button-icon
-                      :title="$t('contextMenu.addToPlaylist')"
-                      @click.native="addToPlaylist(isLocal)"
-                    >
-                      <svg-icon icon-class="plus" />
-                    </button-icon>
-                    <button-icon
                       class="lyric_comment_btn"
+                      :class="{ disabled: heartDisabled }"
                       :title="
-                        $t(
-                          show === 'lyric'
-                            ? 'contextMenu.showComment'
-                            : 'contextMenu.showLyric'
-                        )
+                        heartDisabled
+                          ? $t('player.noAllowCauseLocal')
+                          : $t(
+                              show === 'lyric'
+                                ? 'contextMenu.showComment'
+                                : 'contextMenu.showLyric'
+                            )
                       "
                       @click.native="
                         switchCommentAndLyric(
@@ -144,6 +146,12 @@
                     >
                       <svg-icon v-if="show === 'lyric'" icon-class="comment" />
                       <svg-icon v-else icon-class="lyric" />
+                    </button-icon>
+                    <button-icon
+                      :title="$t('contextMenu.addToPlaylist')"
+                      @click.native="addToPlaylist(isLocal)"
+                    >
+                      <svg-icon icon-class="plus" />
                     </button-icon>
                     <button-icon
                       :title="$t('contextMenu.operationOption')"
@@ -233,13 +241,17 @@
                 <span v-show="showTranIcon" class="transPro" @click="switchRbT">
                   <label
                     v-if="hasTLyric"
-                    :class="{ activeTag: tags[tagIdx] === 'tlyric' }"
+                    :class="{
+                      activeTag: settings.showLyricsTranslation === 'tlyric',
+                    }"
                     >译</label
                   >
                   <label v-if="hasTLyric && hasRLyric" class="m-label">|</label>
                   <label
                     v-if="hasRLyric"
-                    :class="{ activeTag: tags[tagIdx] === 'rlyric' }"
+                    :class="{
+                      activeTag: settings.showLyricsTranslation === 'rlyric',
+                    }"
                     >音</label
                   >
                 </span>
@@ -249,7 +261,12 @@
         </div>
         <div class="right-side">
           <Lyrics v-show="show === 'lyric'" ref="lyricRef" />
-          <Comment v-show="show === 'comment'" ref="commentRef" />
+          <component
+            :is="show !== 'lyric' ? 'comment' : null"
+            v-show="show === 'comment'"
+            ref="commentRef"
+          />
+          <!-- <Comment v-show="show === 'comment'" ref="commentRef" /> -->
           <CommentFloor v-if="show === 'floor_comment'" ref="floorRef" />
         </div>
         <div class="close-button" @click="closePlayPage">
@@ -271,7 +288,7 @@
           $t('contextMenu.playBackSpeed')
         }}</div>
         <div
-          v-if="isLocal"
+          v-if="!heartDisabled"
           ref="playBack"
           class="item"
           @click="addToPlaylist(false)"
@@ -298,7 +315,6 @@ import Comment from '@/views/comment.vue';
 import { hasListSource, getListSourcePath } from '@/utils/playList';
 import locale from '@/locale';
 import CommentFloor from '@/views/commentFloor.vue';
-import { isMac } from '@/utils/platform';
 import ModalDeleteComment from '@/components/ModalDeleteComment.vue';
 import ModalSetLyricDelay from '@/components/ModalSetLyricDelay.vue';
 import ModalSetRate from '@/components/ModalSetRate.vue';
@@ -327,7 +343,7 @@ export default {
       hasLyric: true,
       hasTLyric: false,
       hasRLyric: false,
-      tagIdx: 1,
+      idx: 0,
     };
   },
   computed: {
@@ -339,13 +355,10 @@ export default {
       set() {},
     },
     showTranIcon() {
-      return (
-        this.settings.showLyricsTranslation &&
-        (this.hasTLyric || this.hasRLyric)
-      );
+      return this.hasTLyric || this.hasRLyric;
     },
     tags() {
-      const lst = [''];
+      const lst = ['off'];
       if (this.hasTLyric) {
         lst.splice(1, 0, 'tlyric');
       }
@@ -354,8 +367,13 @@ export default {
       }
       return lst;
     },
+    tagIdx() {
+      let idx = this.tags.indexOf(this.settings.showLyricsTranslation);
+      idx === -1 ? (idx = 0) : idx;
+      return idx;
+    },
     isLocal() {
-      return this.player.currentTrack.isLocal === true;
+      return this.player.currentTrack.isLocal || false;
     },
     volume: {
       get() {
@@ -366,10 +384,14 @@ export default {
       },
     },
     imageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=1024y1024';
+      return this.player.currentTrack?.matched !== false
+        ? this.player.currentTrack?.al?.picUrl + '?param=1024y1024'
+        : `atom://get-pic/${this.player.currentTrack?.filePath}`;
     },
     bgImageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=512y512';
+      return this.player.currentTrack?.matched !== false
+        ? this.player.currentTrack?.al?.picUrl + '?param=512y512'
+        : `atom://get-pic/${this.player.currentTrack?.filePath}`;
     },
     artist() {
       return this.currentTrack?.ar
@@ -385,6 +407,9 @@ export default {
     noLyric() {
       return !this.hasLyric && this.show === 'lyric';
     },
+    heartDisabled() {
+      return this.currentTrack.isLocal && !this.currentTrack.matched;
+    },
   },
   watch: {
     'player.currentTrack': function (newVal, oldVal) {
@@ -394,6 +419,9 @@ export default {
     },
     currentTrack() {
       this.getCoverColor();
+    },
+    tagIdx(val) {
+      this.idx = val;
     },
   },
   created() {
@@ -427,8 +455,17 @@ export default {
         _this.date = _this.formatTime(new Date());
       }, 1000);
     },
+    likeTrack() {
+      if (this.heartDisabled) return;
+      this.likeATrack(this.player.currentTrack.id);
+    },
     switchRbT() {
-      this.tagIdx = (this.tagIdx + 1) % this.tags.length;
+      this.idx = (this.idx + 1) % this.tags.length;
+      const value = this.tags[this.idx];
+      this.$store.commit('updateSettings', {
+        key: 'showLyricsTranslation',
+        value,
+      });
     },
     closePlayPage() {
       this.toggleLyrics();
@@ -450,13 +487,14 @@ export default {
       );
     },
     switchCommentAndLyric(show_option) {
+      if (this.heartDisabled) return;
       this.show = show_option;
     },
     addToPlaylist(isLocal = false) {
       let id = this.currentTrack.id;
       if (isLocal) {
         const localMusic = this.$store.state.localMusic;
-        const track = localMusic.tracks.find(t => t.onlineTrack.id === id);
+        const track = localMusic.tracks.find(t => t.id === id);
         if (!track) return;
         id = [track.id];
         this.updateModal({
@@ -501,10 +539,6 @@ export default {
     },
     playOrPause() {
       this.player.playOrPause();
-      if (isMac && this.settings.showTray && this.settings.showStatusBarLyric) {
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.send('updateTrayPlayState', this.playing);
-      }
     },
     playNextTrack() {
       if (this.player.isPersonalFM) {
@@ -527,7 +561,11 @@ export default {
     },
     getCoverColor() {
       if (this.settings.lyricsBackground !== true) return;
-      const cover = this.currentTrack?.al?.picUrl + '?param=256y256';
+      // const cover = this.currentTrack?.al?.picUrl + '?param=256y256';
+      const cover =
+        this.currentTrack?.matched !== false
+          ? this.currentTrack?.al?.picUrl + '?param=256y256'
+          : `atom://get-pic/${this.currentTrack?.filePath}`;
       Vibrant.from(cover, { colorCount: 1 })
         .getPalette()
         .then(palette => {
@@ -559,8 +597,8 @@ export default {
   bottom: 0;
   z-index: 200;
   background: var(--color-body-bg);
-  display: flex;
-  clip: rect(auto, auto, auto, auto);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .lyrics-background {
@@ -623,12 +661,12 @@ export default {
 }
 
 .left-side {
-  flex: 1;
+  height: 100vh;
   display: flex;
   justify-content: flex-end;
-  margin-right: 80px;
-  margin-top: 24px;
-  width: 50vw;
+  padding-right: 8vh;
+  box-sizing: border-box;
+  padding-top: 24px;
   align-items: center;
   transition: all 0.5s;
   z-index: 50;
@@ -705,6 +743,17 @@ export default {
           }
         }
 
+        .buttons .disabled {
+          cursor: default;
+          opacity: 0.48;
+          &:hover {
+            background: none;
+          }
+          &:active {
+            transform: unset;
+          }
+        }
+
         .lyric_comment_btn {
           .svg-icon {
             height: 25px;
@@ -736,8 +785,7 @@ export default {
     .transPro {
       font-size: 1.2rem;
       color: var(--color-text);
-      position: absolute;
-      right: 5vh;
+      margin-left: 20px;
       user-select: none;
 
       :hover {
@@ -832,18 +880,10 @@ export default {
 
 #comment-box {
   display: none;
-  // background-color: red;
 }
 
-// #lyrics {
-//   display: none;
-// }
-
 .right-side {
-  flex: 1;
-  font-weight: 600;
   color: var(--color-text);
-  margin-right: 24px;
   z-index: 0;
 
   ::-webkit-scrollbar {

@@ -15,32 +15,18 @@ export function createTouchBar(window) {
     );
   }
 
-  const previousPage = new TouchBarButton({
-    click: () => {
-      renderer.send('routerGo', 'back');
-    },
-    icon: getNativeIcon('page_prev.png'),
-  });
-
-  const nextPage = new TouchBarButton({
-    click: () => {
-      renderer.send('routerGo', 'forward');
-    },
-    icon: getNativeIcon('page_next.png'),
-  });
-
-  const searchButton = new TouchBarButton({
-    click: () => {
-      renderer.send('search');
-    },
-    icon: getNativeIcon('search.png'),
-  });
-
   const playButton = new TouchBarButton({
     click: () => {
       renderer.send('play');
     },
     icon: getNativeIcon('play.png'),
+  });
+
+  const fmTrashButton = new TouchBarButton({
+    click: () => {
+      renderer.send('fm-trash');
+    },
+    icon: getNativeIcon('thumbs_down.png'),
   });
 
   const previousTrackButton = new TouchBarButton({
@@ -64,34 +50,45 @@ export function createTouchBar(window) {
     icon: getNativeIcon('like.png'),
   });
 
-  const nextUpButton = new TouchBarButton({
-    click: () => {
-      renderer.send('nextUp');
-    },
-    icon: getNativeIcon('next_up.png'),
-  });
+  // const showLyric = new TouchBarButton({
+  //   label: '听你想听的音乐',
+  // });
 
-  ipcMain.on('player', (e, { playing, likedCurrentTrack }) => {
+  const barLyric = () => {
+    const showLyric = new TouchBarButton({ icon: nativeImage.createEmpty() });
+    global.setBarLyric = function (img, width, height) {
+      const Image = nativeImage
+        .createFromDataURL(img)
+        .resize({ width, height });
+      Image.setTemplateImage(true);
+      showLyric.icon = Image;
+    };
+    return showLyric;
+  };
+
+  ipcMain.on('player', (e, { playing, likedCurrentTrack, isPersionalFM }) => {
     playButton.icon =
       playing === true ? getNativeIcon('pause.png') : getNativeIcon('play.png');
     likeButton.icon = likedCurrentTrack
       ? getNativeIcon('like_fill.png')
       : getNativeIcon('like.png');
+    options.items[0] = isPersionalFM ? fmTrashButton : previousTrackButton;
+    const touch = new TouchBar(options);
+    window.setTouchBar(touch);
   });
 
-  const touchBar = new TouchBar({
+  const options = {
     items: [
-      previousPage,
-      nextPage,
-      searchButton,
-      new TouchBarSpacer({ size: 'flexible' }),
       previousTrackButton,
       playButton,
       nextTrackButton,
-      new TouchBarSpacer({ size: 'flexible' }),
       likeButton,
-      nextUpButton,
+      new TouchBarSpacer({ size: 'flexible' }),
+      barLyric(),
+      // new TouchBarSpacer({ size: 'flexible' }),
     ],
-  });
-  return touchBar;
+  };
+
+  var touchBar = new TouchBar(options);
+  if (touchBar) window.setTouchBar(touchBar);
 }

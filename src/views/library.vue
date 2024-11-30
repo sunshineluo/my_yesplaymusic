@@ -1,12 +1,12 @@
 <template>
   <div v-show="show" ref="library">
-    <h1>
+    <!-- <h1>
       <img
         class="avatar"
         :src="data.user.avatarUrl | resizeImage"
         loading="lazy"
       />{{ data.user.nickname }}{{ $t('library.sLibrary') }}
-    </h1>
+    </h1> -->
     <div class="section-one">
       <div class="liked-songs" @click="goToLikedSongsList">
         <div class="top">
@@ -33,9 +33,13 @@
       </div>
       <div class="songs">
         <TrackList
+          v-if="liked.songsWithDetails.length > 0"
           :id="liked.playlists.length > 0 ? liked.playlists[0].id : 0"
           :tracks="liked.songsWithDetails"
           :column-number="3"
+          :item-size="57"
+          :show-position="false"
+          :enabled="false"
           type="tracklist"
           dbclick-track-func="playPlaylistByID"
         />
@@ -143,18 +147,19 @@
         <MvRow :mvs="liked.mvs" />
       </div>
 
-      <div v-show="currentTab === 'cloudDisk'">
+      <div v-if="currentTab === 'cloudDisk'" style="padding-bottom: 64px">
         <TrackList
+          v-if="liked.cloudDisk.length > 0"
           :id="-8"
           :tracks="liked.cloudDisk"
-          :column-number="3"
+          :column-number="1"
           type="cloudDisk"
           dbclick-track-func="playCloudDisk"
           :extra-context-menu-item="['removeTrackFromCloudDisk']"
         />
       </div>
 
-      <div v-show="currentTab === 'playHistory'">
+      <div v-if="currentTab === 'playHistory'" style="padding-bottom: 64px">
         <button
           :class="{
             'playHistory-button': true,
@@ -174,6 +179,7 @@
           {{ $t('library.playHistory.all') }}
         </button>
         <TrackList
+          v-if="playHistoryList.length > 0"
           :tracks="playHistoryList"
           :column-number="1"
           type="tracklist"
@@ -202,6 +208,10 @@
     </ContextMenu>
 
     <ContextMenu ref="playModeTabMenu">
+      <div class="item" @click="playThisTrack">{{
+        $t('library.playCurrentTrack')
+      }}</div>
+      <hr />
       <div class="item" @click="playLikedSongs">{{
         $t('library.likedSongs')
       }}</div>
@@ -246,13 +256,14 @@ export default {
       show: false,
       lyricSong: undefined,
       likedSongs: [],
+      randomTrackID: 0,
       lyric: undefined,
       currentTab: 'playlists',
       playHistoryMode: 'week',
     };
   },
   computed: {
-    ...mapState(['data', 'liked']),
+    ...mapState(['data', 'liked', 'player']),
     /**
      * @returns {string[]}
      */
@@ -342,6 +353,9 @@ export default {
       this.$store.dispatch('fetchCloudDisk');
       this.$store.dispatch('fetchPlayHistory');
     },
+    scrollTo(top) {
+      this.$parent.$refs.main.scrollTo({ top, behavior: 'smooth' });
+    },
     playLikedSongs() {
       this.$store.state.player.playPlaylistByID(
         this.liked.playlists[0].id,
@@ -367,11 +381,15 @@ export default {
     goToLikedSongsList() {
       this.$router.push({ path: '/library/liked-songs' });
     },
-    getRandomLyric() {
+    playThisTrack() {
+      this.player.addTrackToPlayNext(this.randomTrackID, true, true);
+    },
+    async getRandomLyric() {
       if (this.liked.songs.length === 0) return;
       const id = this.liked.songs[randomNum(0, this.liked.songs.length - 1)];
-      getTrackDetail(id).then(data => {
-        this.lyricSong = data.songs[0].name;
+      const track_name = await getTrackDetail(id).then(data => {
+        this.randomTrackID = id;
+        return data.songs[0].name;
       });
       getLyric(id).then(data => {
         if (data.lrc !== undefined) {
@@ -380,6 +398,7 @@ export default {
             .filter(l => l.includes('纯音乐，请欣赏'));
           if (isInstrumental.length === 0) {
             this.lyric = data.lrc.lyric;
+            this.lyricSong = track_name;
           }
         }
       });

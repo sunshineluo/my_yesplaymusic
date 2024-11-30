@@ -20,6 +20,7 @@ export default {
   },
   library: {
     sLibrary: '的音樂庫',
+    playCurrentTrack: '播放此歌曲',
     likedSongs: '我喜歡的音樂',
     sLikedSongs: '喜歡的音樂',
     playlists: '歌單',
@@ -100,7 +101,7 @@ export default {
     notice: `YesPlayMusic 承諾不會保存您的任何帳戶資訊到雲端。<br />
         您的密碼會在本地進行 MD5 加密後再傳輸到網易雲 API。<br />
         YesPlayMusic 並非網易雲官方網站，輸入帳戶資訊前請慎重考慮。 您也可以前往
-        <a href="https://github.com/stark81/YesPlayMusic"
+        <a href="https://github.com/stark81/my_yesplaymusic"
           >YesPlayMusic 的 GitHub 原始碼 Repo</a
         >
         自行編譯並使用自託管的網易雲 API。`,
@@ -127,6 +128,7 @@ export default {
     pause: '暫停',
     mute: '靜音',
     nextUp: '播放清單',
+    osdLyrics: '桌面歌詞',
   },
   modal: {
     close: '關閉',
@@ -173,7 +175,12 @@ export default {
     automaticallyCacheSongs: '自動快取歌曲',
     clearSongsCache: '清除歌曲快取',
     cacheCount: '已快取 {song} 首 ({size})',
-    showLyricsTranslation: '顯示歌詞翻譯/音譯',
+    showLyricsTranslation: {
+      text: '顯示歌詞翻譯/音譯',
+      never: '從不',
+      tlyric: '翻譯',
+      rlyric: '音譯',
+    },
     showTray: '顯示狀態欄圖示',
     showControl: '顯示控制按鈕',
     showStatusBarLyric: '顯示狀態欄歌詞',

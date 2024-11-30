@@ -11,16 +11,18 @@
       <button @click="player.clearPlayNextList()">清除队列</button>
     </h1>
     <TrackList
-      v-show="playNextList.length > 0"
       :tracks="playNextTracks"
       type="playlist"
       :highlight-playing-track="false"
+      :show-position="false"
+      :enabled="false"
       dbclick-track-func="playTrackOnListByID"
       item-key="id+index"
       :extra-context-menu-item="['removeTrackFromQueue']"
     />
     <h1>{{ $t('next.nextUp') }}</h1>
     <TrackList
+      v-if="filteredTracks.length > 0"
       :tracks="filteredTracks"
       type="playlist"
       :highlight-playing-track="false"
@@ -33,8 +35,6 @@
 import { mapState, mapActions } from 'vuex';
 import { getTrackDetail } from '@/api/track';
 import TrackList from '@/components/TrackList.vue';
-import state from '@/store/state';
-import { localTrackParser } from '@/utils/localSongParser';
 
 export default {
   name: 'Next',
@@ -47,7 +47,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(['player']),
+    ...mapState(['player', 'localMusic']),
     currentTrack() {
       return this.player.currentTrack;
     },
@@ -81,9 +81,12 @@ export default {
       this.loadTracks();
     },
   },
-  activated() {
+  mounted() {
+    this.$parent.$refs.main.style.paddingBottom = '0';
     this.loadTracks();
-    this.$parent.$refs.scrollbar.restorePosition();
+  },
+  beforeDestroy() {
+    this.$parent.$refs.main.style.paddingBottom = '96px';
   },
   methods: {
     ...mapActions(['playTrackOnListByID']),
@@ -97,39 +100,32 @@ export default {
       // 将playNextList的歌曲加进trackIDs
       trackIDs.push(...this.playNextList);
 
-      // 获取已经加载了的歌曲
+      // // 获取已经加载了的歌曲
       let loadedTrackIDs = this.tracks.map(t => t.id);
 
-      if (trackIDs.length > 0) {
-        const songs = state.localMusic.songs.filter(obj =>
-          trackIDs.includes(obj.id)
-        );
-        for (const song of songs) {
-          const track = localTrackParser(song.id);
-          if (track && !this.tracks.some(a => a.id === track.id)) {
-            this.tracks.push(track);
-          }
-        }
-        // this.tracks = [...new Set(this.tracks)];
+      const localTracks = this.localMusic.tracks.filter(t =>
+        trackIDs.includes(t.id)
+      );
+      let newTracks = localTracks.filter(t => !loadedTrackIDs.includes(t.id));
 
-        const filterIDs = trackIDs.filter(
-          a => !songs.some(b => b.trackID === a)
-        );
-        if (filterIDs.length !== 0) {
-          getTrackDetail(filterIDs.join(',')).then(data => {
-            let newTracks = data.songs.filter(
-              t => !loadedTrackIDs.includes(t.id)
-            );
-            this.tracks.push(...newTracks);
-            this.tracks = [...new Set(this.tracks)];
-          });
-        }
-        this.tracks.sort((a, b) => {
-          const indexA = trackIDs.indexOf(a.id);
-          const indexB = trackIDs.indexOf(b.id);
-          return indexA - indexB;
+      const newTrackIDs = trackIDs.filter(
+        t => !localTracks.map(s => s.id).includes(t)
+      );
+
+      if (newTrackIDs.length > 0) {
+        getTrackDetail(trackIDs.join(',')).then(data => {
+          newTracks.push(
+            ...data.songs.filter(t => !loadedTrackIDs.includes(t.id))
+          );
         });
       }
+      newTracks = newTracks
+        .filter(t => trackIDs.includes(t.id))
+        .sort((a, b) => trackIDs.indexOf(a.id) - trackIDs.indexOf(b.id));
+      this.tracks.push(...newTracks);
+    },
+    scrollTo(top) {
+      this.$parent.$refs.main.scrollTo({ top, behavior: 'smooth' });
     },
   },
 };

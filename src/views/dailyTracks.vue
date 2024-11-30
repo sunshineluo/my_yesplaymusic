@@ -5,11 +5,13 @@
       <div class="subtitle">根据你的音乐口味生成 · 每天6:00更新</div>
     </div>
 
-    <TrackList
-      :tracks="dailyTracks"
-      type="playlist"
-      dbclick-track-func="dailyTracks"
-    />
+    <div>
+      <TrackList
+        :tracks="dailyTracks"
+        type="playlist"
+        dbclick-track-func="dailyTracks"
+      />
+    </div>
   </div>
 </template>
 
@@ -42,7 +44,13 @@ export default {
     } else {
       this.show = true;
     }
-    this.$parent.$refs.main.scrollTo(0, 0);
+  },
+  mounted() {
+    this.$parent.$refs.main.scrollTo({ top: 0 });
+    // this.$parent.$refs.main.style.paddingBottom = '0';
+  },
+  beforeDestroy() {
+    // this.$parent.$refs.main.style.paddingBottom = '96px';
   },
   methods: {
     ...mapMutations(['updateDailyTracks']),
@@ -52,6 +60,9 @@ export default {
         NProgress.done();
         this.show = true;
       });
+    },
+    scrollTo(top) {
+      this.$parent.$refs.main.scrollTo({ top, behavior: 'smooth' });
     },
   },
 };

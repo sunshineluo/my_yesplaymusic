@@ -20,6 +20,7 @@ export default {
   },
   library: {
     sLibrary: '的音乐库',
+    playCurrentTrack: '播放此歌曲',
     likedSongs: '我喜欢的音乐',
     sLikedSongs: '喜欢的音乐',
     playlists: '歌单',
@@ -100,7 +101,7 @@ export default {
     notice: `YesPlayMusic 承诺不会保存你的任何账号信息到云端。<br />
       你的密码会在本地进行 MD5 加密后再传输到网易云 API。<br />
       YesPlayMusic 并非网易云官方网站，输入账号信息前请慎重考虑。 你也可以前往
-      <a href="https://github.com/stark81/YesPlayMusic/"
+      <a href="https://github.com/stark81/my_yesplaymusic/"
         >YesPlayMusic 的 GitHub 源代码仓库</a
       >
       自行构建并使用自托管的网易云 API。`,
@@ -127,6 +128,8 @@ export default {
     pause: '暂停',
     mute: '静音',
     nextUp: '播放列表',
+    osdLyrics: '桌面歌词',
+    noAllowCauseLocal: '本地歌曲，无法操作',
   },
   modal: {
     close: '关闭',
@@ -173,22 +176,25 @@ export default {
     automaticallyCacheSongs: '自动缓存歌曲',
     clearSongsCache: '清除歌曲缓存',
     cacheCount: '已缓存 {song} 首 ({size})',
-    showLyricsTranslation: '显示歌词翻译/音译',
+    showLyricsTranslation: {
+      text: '显示歌词翻译/音译',
+      never: '从不',
+      tlyric: '翻译',
+      rlyric: '音译',
+    },
     showTray: '显示状态栏图标',
     showControl: '显示控制按钮',
     showStatusBarLyric: '显示状态栏歌词',
+    showStatusMenu: {
+      title: '启用图标菜单',
+      desc1: '开启此项后，当状态栏控制按钮和状态栏歌词',
+      desc2: '同时关闭时，将为托盘图标添加菜单栏',
+    },
     minimizeToTray: '最小化到托盘',
     showPlaylistsByAppleMusic: '首页显示来自 Apple Music 的歌单',
     enableDiscordRichPresence: '启用 Discord Rich Presence',
     enableGlobalShortcut: '启用全局快捷键',
     showLibraryDefault: '启动后显示音乐库',
-    localMusicShowDefault: {
-      text: '本地音乐默认显示',
-      localSongs: '本地歌曲',
-      playlists: '离线歌单',
-      albums: '专辑',
-      artists: '艺人',
-    },
     showTimeOrID: {
       text: '歌曲列表歌曲信息显示选项',
       time: '歌曲时长',
@@ -237,14 +243,38 @@ export default {
         desc2: '留空则不进行相关设置',
       },
     },
+    localMusic: {
+      localMusicShowDefault: {
+        text: '本地音乐默认显示',
+        localSongs: '本地歌曲',
+        playlists: '离线歌单',
+        albums: '专辑',
+        artists: '艺人',
+      },
+      localMusicFirst: {
+        title: '优先使用本地歌曲',
+        desc: '假如本地歌曲A匹配的在线歌曲为B，当播放在线歌曲B时，使用本地歌曲A播放',
+      },
+      matchStatus: {
+        title: '本地歌曲匹配状态',
+        desc: '切换开关对已匹配的歌曲无影响',
+      },
+      exportLocalMusic: '导出本地歌曲信息',
+      importLocalMusic: '导入本地歌曲信息',
+      clearLocalMusic: '清空本地歌曲信息',
+      localMusicPath: '本地歌曲扫描路径',
+      localMusicMatchedStatus: '本地歌曲匹配状态',
+    },
   },
   contextMenu: {
     play: '播放',
     addToQueue: '添加到队列',
     reMatchTrack: '重新匹配歌曲',
     accurateMatch: '精准匹配',
+    deleteMatch: '取消匹配',
     addToLocalPlaylist: '添加到本地歌单',
     removeFromQueue: '从队列删除',
+    showInFolder: '在文件管理器中显示',
     removeLocalTrack: '移除歌曲',
     recoveryTrack: '恢复移除歌曲',
     finish: '完成',

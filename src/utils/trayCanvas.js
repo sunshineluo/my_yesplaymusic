@@ -3,7 +3,7 @@ import store from '@/store';
 const player = store.state.player;
 
 export class Canvas {
-  constructor({ width = 175, height = 22, devicePixelRatio = 1 }) {
+  constructor({ width = 195, height = 22, devicePixelRatio = 1 }) {
     this.w = width;
     this.h = height;
     this.devicePixelRatio = devicePixelRatio;
@@ -27,9 +27,6 @@ export class Control extends Canvas {
     for (let index in this.imageList) {
       const item = this.imageList[index];
       await this.drawImage(index, item);
-      // if (parseInt(index) + 1 === this.imageList.length) {
-      //   eventBus.$emit('control-draw');
-      // }
     }
     eventBus.$emit('control-draw');
   }
@@ -55,9 +52,9 @@ export class Control extends Canvas {
 }
 
 export class Lyric extends Canvas {
-  constructor() {
-    super({ devicePixelRatio: 2 });
-    this.fontSize = 14;
+  constructor({ width = 195, height = 22, fontSize = 14 } = {}) {
+    super({ width, height, devicePixelRatio: 2 });
+    this.fontSize = fontSize;
     this.allLyric = null;
     this.lyric = {
       text: player.currentTrack.name || '听你想听的音乐',
@@ -67,10 +64,10 @@ export class Lyric extends Canvas {
     this.x = 0; // 移动的距离
     this.timerId = null;
     this.timer = null;
-    this.frame = 60;
+    this.frame = 34; // 歌词滚动的帧率
     this.ctx.font = `${
       this.fontSize * this.devicePixelRatio
-    }px "microsoft yahei", sans-serif`;
+    }px "pingfang sc", "microsoft yahei", sans-serif`;
     this.ctx.textBaseline = 'middle';
     // this.findCurrentLyric();
   }
@@ -167,7 +164,7 @@ export class Lyric extends Canvas {
       this.ctx.textAlign = 'left';
     }
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.fillText(this.lyric.text, x, this.canvas.height / 2 + 2);
+    this.ctx.fillText(this.lyric.text, x, this.canvas.height / 2 + 1);
     eventBus.$emit('lyric-draw');
   }
 }

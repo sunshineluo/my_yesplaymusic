@@ -24,14 +24,17 @@ import { createMenu } from './electron/menu';
 import { createTray } from '@/electron/tray';
 import { createTouchBar } from './electron/touchBar';
 import { createDockMenu } from './electron/dockMenu';
+import { getLyrics } from './electron/utils';
 import { registerGlobalShortcut } from './electron/globalShortcut';
 import { autoUpdater } from 'electron-updater';
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer';
-import { EventEmitter } from 'events';
+// import { EventEmitter } from 'events';
 import express from 'express';
 import expressProxy from 'express-http-proxy';
 import Store from 'electron-store';
 import { createMpris } from '@/electron/mpris';
+import { release, type } from 'os';
+import { parseFile } from 'music-metadata';
 
 const clc = require('cli-color');
 const log = text => {
@@ -84,6 +87,7 @@ const closeOnLinux = (e, win, store) => {
 class Background {
   constructor() {
     this.window = null;
+    this.osdlyrics = null;
     this.ypmTrayImpl = null;
     this.store = new Store({
       windowWidth: {
@@ -102,6 +106,9 @@ class Background {
     log('initializing');
 
     // Make sure the app is singleton.
+    if (release().startsWith('6.1') && type() == 'Windows_NT')
+      app.disableHardwareAcceleration();
+    if (process.platform === 'win32') app.setAppUserModelId(app.getName());
     if (!app.requestSingleInstanceLock()) return app.quit();
 
     // start netease music api
@@ -113,6 +120,15 @@ class Background {
     // Scheme must be registered before the app is ready
     protocol.registerSchemesAsPrivileged([
       { scheme: 'app', privileges: { secure: true, standard: true } },
+      {
+        scheme: 'atom',
+        privileges: {
+          secure: true,
+          standard: true,
+          supportFetchAPI: true,
+          stream: true,
+        },
+      },
     ]);
 
     // handle app events
@@ -159,12 +175,13 @@ class Background {
       this.window.webContents
         .executeJavaScript('window.yesplaymusic.player')
         .then(result => {
-          res.send({
+          const player = {
             currentTrack: result._isPersonalFM
               ? result._personalFMTrack
               : result._currentTrack,
             progress: result._progress,
-          });
+          };
+          res.send(player);
         });
     });
     this.expressApp = expressApp.listen(27232, '127.0.0.1');
@@ -177,6 +194,8 @@ class Background {
     const showLibraryDefault = this.store.get('settings.showLibraryDefault');
 
     const options = {
+      x: this.store.get('window.x'),
+      y: this.store.get('window.y'),
       width: this.store.get('window.width') || 1440,
       height: this.store.get('window.height') || 840,
       minWidth: 1080,
@@ -264,6 +283,89 @@ class Background {
     }
   }
 
+  createOSDWindow() {
+    this.osdlyrics = new BrowserWindow({
+      x: this.store.get('osdlyrics.x_pos') || 0,
+      y: this.store.get('osdlyrics.y_pos') || 0,
+      width: this.store.get('osdlyrics.width') || 840,
+      height: this.store.get('osdlyrics.height') || 110,
+      transparent: true,
+      // backgroundColor: '#00000000',
+      frame: false,
+      // show: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hiddenInMissionControl: true,
+      hasShadow: false,
+      title: 'YesPlayMusic-桌面歌词',
+      webPreferences: {
+        webSecurity: false,
+        nodeIntegration: true,
+        enableRemoteModule: true,
+        contextIsolation: false,
+      },
+    });
+
+    this.osdlyrics.setVisibleOnAllWorkspaces(true);
+    if (process.env.WEBPACK_DEV_SERVER_URL) {
+      // Load the url of the dev server if in development mode
+      this.osdlyrics.loadURL(
+        `${process.env.WEBPACK_DEV_SERVER_URL}/osdlyric.html`
+      );
+    } else {
+      createProtocol('app');
+      this.osdlyrics.loadURL('http://localhost:27232/osdlyric.html');
+    }
+  }
+
+  initOSDLyrics() {
+    const osdState = this.store.get('osdlyrics.show') || false;
+    if (osdState) {
+      this.showOSDLyrics();
+    }
+  }
+
+  toggleOSDLyrics() {
+    const osdState = this.store.get('osdlyrics.show') || false;
+    if (osdState) {
+      this.hideOSDLyrics();
+    } else {
+      this.showOSDLyrics();
+    }
+  }
+
+  receiveLyric(arg) {
+    if (this.osdlyrics) {
+      this.osdlyrics.webContents.send('lyric', arg);
+    }
+  }
+
+  sendLyricIndex(idx) {
+    if (this.osdlyrics) {
+      this.osdlyrics.webContents.send('index', idx);
+    }
+  }
+
+  showOSDLyrics() {
+    this.store.set('osdlyrics.show', true);
+    if (!this.osdlyrics) {
+      this.createOSDWindow();
+      this.handleOSDEvents();
+    }
+  }
+
+  hideOSDLyrics() {
+    this.store.set('osdlyrics.show', false);
+    if (this.osdlyrics) {
+      this.osdlyrics.close();
+    }
+  }
+
+  resizeOSDLyrics(height) {
+    const width = this.store.get('osdlyrics.width') || 840;
+    this.osdlyrics.setSize(width, height);
+  }
+
   checkForUpdates() {
     if (isDevelopment) return;
     log('checkForUpdates');
@@ -282,7 +384,7 @@ class Background {
         .then(result => {
           if (result.response === 0) {
             shell.openExternal(
-              'https://github.com/stark81/YesPlayMusic/releases/'
+              'https://github.com/stark81/my_yesplaymusic/releases/'
             );
           }
         });
@@ -290,6 +392,32 @@ class Background {
 
     autoUpdater.on('update-available', info => {
       showNewVersionMessage(info);
+    });
+  }
+
+  handleOSDEvents() {
+    this.osdlyrics.once('ready-to-show', () => {
+      const osdState = this.store.get('osdlyrics.show') || false;
+      if (osdState) {
+        this.osdlyrics.showInactive();
+      }
+    });
+
+    this.osdlyrics.on('closed', () => {
+      log('OSD close event');
+      this.osdlyrics = null;
+    });
+
+    this.osdlyrics.on('resize', () => {
+      let { height, width } = this.osdlyrics.getBounds();
+      this.store.set('osdlyrics.width', width);
+      this.store.set('osdlyrics.height', height);
+    });
+
+    this.osdlyrics.on('move', () => {
+      var pos = this.osdlyrics.getPosition();
+      this.store.set('osdlyrics.x_pos', pos[0]);
+      this.store.set('osdlyrics.y_pos', pos[1]);
     });
   }
 
@@ -325,12 +453,14 @@ class Background {
       }
     });
 
-    this.window.on('resized', () => {
+    this.window.on('resize', () => {
       this.store.set('window', this.window.getBounds());
     });
 
-    this.window.on('moved', () => {
-      this.store.set('window', this.window.getBounds());
+    this.window.on('move', () => {
+      var pos = this.window.getPosition();
+      this.store.set('window.x', pos[0]);
+      this.store.set('window.y', pos[1]);
     });
 
     this.window.on('maximize', () => {
@@ -366,12 +496,56 @@ class Background {
     });
   }
 
+  handleProtocol() {
+    protocol.registerBufferProtocol('atom', async (request, callback) => {
+      const { host, pathname } = new URL(request.url);
+      if (host === 'get-pic') {
+        const filePath = pathname.slice(1);
+        const metadata = await parseFile(decodeURI(filePath));
+        let pic, format;
+        if (metadata.common.picture && metadata.common.picture.length > 0) {
+          pic = metadata.common.picture[0].data;
+          format = metadata.common.picture[0].format;
+          callback({ mimeType: format, data: pic });
+        } else {
+          const https = require('https');
+          https.get(
+            'https://p2.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg',
+            res => {
+              let data = [];
+              res.on('data', chunk => {
+                data.push(chunk);
+              });
+              res.on('end', () => {
+                const buffer = Buffer.concat(data);
+                callback({
+                  data: buffer,
+                  mimeType: res.headers['content-type'],
+                });
+              });
+            }
+          );
+        }
+      } else if (host === 'get-lyric') {
+        const filePath = pathname.slice(1);
+        const metadata = await parseFile(decodeURI(filePath));
+        const lyric = getLyrics(metadata);
+        callback({
+          mimeType: 'application/json',
+          data: Buffer.from(JSON.stringify(lyric)),
+        });
+      }
+    });
+  }
+
   handleAppEvents() {
     app.on('ready', async () => {
       // This method will be called when Electron has finished
       // initialization and is ready to create browser windows.
       // Some APIs can only be used after this event occurs.
       log('app ready event');
+
+      this.handleProtocol();
 
       // for development
       if (isDevelopment) {
@@ -385,14 +559,20 @@ class Background {
       });
       this.handleWindowEvents();
 
+      this.initOSDLyrics();
+
       // create tray
       if (isCreateTray) {
-        this.trayEventEmitter = new EventEmitter();
-        this.ypmTrayImpl = createTray(this.window, this.trayEventEmitter);
+        this.ypmTrayImpl = createTray(this.window);
       }
 
       // init ipcMain
-      initIpcMain(this.window, this.store, this.trayEventEmitter);
+      initIpcMain(this.window, this.store, this.ypmTrayImpl, {
+        resizeOSDLyrics: height => this.resizeOSDLyrics(height),
+        toggleOSDLyrics: () => this.toggleOSDLyrics(),
+        receiveLyric: lyric => this.receiveLyric(lyric),
+        sendLyricIndex: index => this.sendLyricIndex(index),
+      });
 
       // set proxy
       const proxyRules = this.store.get('proxy');
@@ -409,12 +589,11 @@ class Background {
       createMenu(this.window, this.store);
 
       // create dock menu for macOS
-      const createdDockMenu = createDockMenu(this.window);
-      if (createDockMenu && app.dock) app.dock.setMenu(createdDockMenu);
+      createDockMenu(this.window);
 
       // create touch bar
-      const createdTouchBar = createTouchBar(this.window);
-      if (createdTouchBar) this.window.setTouchBar(createdTouchBar);
+      createTouchBar(this.window);
+      // if (createdTouchBar) this.window.setTouchBar(createdTouchBar);
 
       // register global shortcuts
       if (this.store.get('settings.enableGlobalShortcut') !== false) {

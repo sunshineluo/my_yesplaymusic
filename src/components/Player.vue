@@ -25,11 +25,7 @@
     <div class="controls">
       <div class="playing">
         <div class="container" @click.stop>
-          <img
-            :src="currentTrack.al && currentTrack.al.picUrl | resizeImage(224)"
-            loading="lazy"
-            @click="goToAlbum"
-          />
+          <img :src="imgUrl" loading="lazy" @click="goToAlbum" />
           <div class="track-info" :title="audioSource">
             <div
               :class="['name', { 'has-list': hasList() }]"
@@ -41,31 +37,13 @@
               <span
                 v-for="(ar, index) in currentTrack.ar"
                 :key="ar.id"
-                @click="ar.id && goToArtist(ar.id)"
+                @click="goToArtist(ar)"
               >
-                <span :class="{ ar: ar.id }"> {{ ar.name }} </span
+                <span :class="{ ar: ar.matched !== false }">
+                  {{ ar.name }} </span
                 ><span v-if="index !== currentTrack.ar.length - 1">, </span>
               </span>
             </div>
-          </div>
-          <div class="like-button">
-            <button-icon
-              :title="
-                player.isCurrentTrackLiked
-                  ? $t('player.unlike')
-                  : $t('player.like')
-              "
-              @click.native="likeATrack(player.currentTrack.id)"
-            >
-              <svg-icon
-                v-show="!player.isCurrentTrackLiked"
-                icon-class="heart"
-              ></svg-icon>
-              <svg-icon
-                v-show="player.isCurrentTrackLiked"
-                icon-class="heart-solid"
-              ></svg-icon>
-            </button-icon>
           </div>
         </div>
         <div class="blank"></div>
@@ -73,6 +51,18 @@
       <div class="middle-control-buttons">
         <div class="blank"></div>
         <div class="container" @click.stop>
+          <button-icon
+            :class="{
+              active: player.isCurrentTrackLiked,
+              disabled: heartDisabled,
+            }"
+            :title="
+              heartDisabled ? $t('player.noAllowCauseLocal') : $t('player.like')
+            "
+            @click.native="likeTrack"
+          >
+            <svg-icon icon-class="heart-solid"></svg-icon>
+          </button-icon>
           <button-icon
             v-show="!player.isPersonalFM"
             :title="$t('player.previous')"
@@ -94,6 +84,13 @@
           /></button-icon>
           <button-icon :title="$t('player.next')" @click.native="playNextTrack"
             ><svg-icon icon-class="next"
+          /></button-icon>
+          <button-icon
+            v-if="osdState"
+            :title="$t('player.osdLyrics')"
+            :class="{ active: settings.showOsdLyric }"
+            @click.native="toggleOSDLyrics"
+            ><svg-icon icon-class="osd-lyrics" style="transform: scale(1.2)"
           /></button-icon>
         </div>
         <div class="blank"></div>
@@ -181,6 +178,10 @@
 </template>
 
 <script>
+const electron =
+  process.env.IS_ELECTRON === true ? window.require('electron') : null;
+const ipcRenderer =
+  process.env.IS_ELECTRON === true ? electron.ipcRenderer : null;
 import { mapState, mapMutations, mapActions } from 'vuex';
 import '@/assets/css/slider.css';
 
@@ -188,7 +189,6 @@ import ButtonIcon from '@/components/ButtonIcon.vue';
 import VueSlider from 'vue-slider-component';
 import { goToListSource, hasListSource } from '@/utils/playList';
 import { formatTrackTime } from '@/utils/common';
-import { isMac } from '@/utils/platform';
 
 export default {
   name: 'Player',
@@ -217,19 +217,40 @@ export default {
         ? '音源来自酷我音乐'
         : '';
     },
+    osdState() {
+      return Boolean(ipcRenderer);
+    },
+    heartDisabled() {
+      return this.currentTrack.isLocal && !this.currentTrack.matched;
+    },
+    imgUrl() {
+      let image =
+        this.currentTrack?.al?.picUrl ??
+        this.currentTrack?.album?.picUrl ??
+        'https://p2.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg';
+      image += '?param=112y112';
+      return this.currentTrack?.matched !== false
+        ? image
+        : `atom://get-pic/${this.currentTrack?.filePath}`;
+    },
   },
   methods: {
     ...mapMutations(['toggleLyrics']),
     ...mapActions(['showToast', 'likeATrack']),
+    toggleOSDLyrics() {
+      if (ipcRenderer) {
+        this.$store.commit('updateSettings', {
+          key: 'showOsdLyric',
+          value: !this.settings.showOsdLyric,
+        });
+        ipcRenderer.send('toggleOSDLyrics');
+      }
+    },
     playPrevTrack() {
       this.player.playPrevTrack();
     },
     playOrPause() {
       this.player.playOrPause();
-      if (isMac && this.settings.showTray && this.settings.showStatusBarLyric) {
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.send('updateTrayPlayState', this.playing);
-      }
     },
     playNextTrack() {
       if (this.player.isPersonalFM) {
@@ -237,6 +258,10 @@ export default {
       } else {
         this.player.playNextTrack();
       }
+    },
+    likeTrack() {
+      if (this.heartDisabled) return;
+      this.likeATrack(this.player.currentTrack.id);
     },
     goToNextTracksPage() {
       if (this.player.isPersonalFM) return;
@@ -254,11 +279,12 @@ export default {
       goToListSource();
     },
     goToAlbum() {
-      if (this.player.currentTrack.al.id === 0) return;
+      if (this.heartDisabled) return;
       this.$router.push({ path: '/album/' + this.player.currentTrack.al.id });
     },
-    goToArtist(id) {
-      this.$router.push({ path: '/artist/' + id });
+    goToArtist(ar) {
+      if (ar.matched !== true) return;
+      this.$router.push({ path: '/artist/' + ar.id });
     },
     moveToFMTrash() {
       this.player.moveToFMTrash();
@@ -407,6 +433,10 @@ export default {
   }
 }
 
+.active .svg-icon {
+  color: var(--color-primary);
+}
+
 .right-control-buttons {
   display: flex;
 }
@@ -421,9 +451,6 @@ export default {
       height: 24px;
       width: 24px;
     }
-  }
-  .active .svg-icon {
-    color: var(--color-primary);
   }
   .volume-control {
     margin-left: 4px;

@@ -1,18 +1,5 @@
 <template>
   <div v-show="show" ref="localMusicRef">
-    <h1>
-      <img
-        class="avatar"
-        :src="data.user.avatarUrl | resizeImage"
-        loading="lazy"
-      />
-      {{
-        data.user.nickname
-          ? `${data.user.nickname}${$t('localMusic.sLocalMusic')}`
-          : $t('contextMenu.localMusic')
-      }}
-    </h1>
-
     <div class="section-one">
       <div class="liked-songs">
         <div class="top">
@@ -29,9 +16,12 @@
           <div class="titles">
             <div class="title">{{ $t('localMusic.latedAdd') }}</div>
             <div class="sub-title">
-              {{ allTracks.length }}{{ $t('common.songs') }}
+              {{ localTrackLenght }}{{ $t('common.songs') }}
             </div>
           </div>
+          <button @click="playThisTrack">
+            <svg-icon icon-class="play" />
+          </button>
         </div>
       </div>
       <div class="songs">
@@ -40,11 +30,16 @@
           :tracks="randomShowTracks"
           :column-number="3"
           type="tracklist"
+          :show-position="false"
+          :item-size="57"
+          :enabled="false"
           :extra-context-menu-item="[
+            'showInFolder',
             'removeLocalTrack',
             'addToLocalList',
             'reMatch',
             'accurateMatch',
+            'deleteMatch',
           ]"
         />
       </div>
@@ -99,23 +94,15 @@
           <div v-if="isBatchOp" class="tab" @click="batchOperation('recovery')">
             {{ $t('contextMenu.recoveryTrack') }}
           </div>
-          <div v-if="isBatchOp" class="tab" @click="batchOpSwitch">
+          <div v-if="isBatchOp" class="tab" @click="doFinish">
             {{ $t('contextMenu.finish') }}
           </div>
         </div>
-        <div v-if="currentTab === 'localSongs'" class="search-box">
-          <div class="container" :class="{ active: inputFocus }">
-            <svg-icon icon-class="search" />
-            <div class="input">
-              <input
-                v-model.trim="inputKeywords"
-                :placeholder="inputFocus ? '' : $t('localMusic.search')"
-                @input="inputDebounce()"
-                @focus="inputFocus = true"
-                @blur="inputFocus = false"
-              />
-            </div>
-          </div>
+        <div v-show="currentTab === 'localSongs'" class="search-box">
+          <SearchBox
+            :placeholder="$t('localMusic.search')"
+            @update:keywords="doFilter($event)"
+          />
         </div>
         <button
           v-show="currentTab === 'playlists'"
@@ -130,19 +117,20 @@
           ref="trackListRef"
           :tracks="filterLocalTracks"
           :column-number="1"
-          type="localtracks"
+          type="localTracks"
           :is-batch-op="isBatchOp"
-          :selected-track-ids="selectedTrackIds"
           :extra-context-menu-item="[
+            'showInFolder',
             'removeLocalTrack',
             'addToLocalList',
             'reMatch',
             'accurateMatch',
+            'deleteMatch',
           ]"
         />
       </div>
 
-      <div v-show="currentTab === 'playlists'">
+      <div v-if="currentTab === 'playlists'">
         <div v-if="localMusic.playlists.length > 0">
           <CoverRow
             :items="filterPlaylists"
@@ -152,7 +140,7 @@
         </div>
       </div>
 
-      <div v-show="currentTab === 'albums'">
+      <div v-if="currentTab === 'albums'">
         <CoverRow
           :items="activeAlbums"
           type="album"
@@ -161,7 +149,7 @@
         />
       </div>
 
-      <div v-show="currentTab === 'artists'">
+      <div v-if="currentTab === 'artists'">
         <CoverRow
           :items="activeArtists"
           type="artist"
@@ -175,22 +163,22 @@
     <ContextMenu ref="playlistTabMenu">
       <div
         class="item"
-        @click="updateLocalXXX({ name: 'sortBy', data: 'default' })"
+        @click="updateLocalMusicXXX({ name: 'sortBy', data: 'default' })"
         >{{ $t('contextMenu.defaultSort') }}</div
       >
       <div
         class="item"
-        @click="updateLocalXXX({ name: 'sortBy', data: 'byname' })"
+        @click="updateLocalMusicXXX({ name: 'sortBy', data: 'byname' })"
         >{{ $t('contextMenu.sortByName') }}</div
       >
       <div
         class="item"
-        @click="updateLocalXXX({ name: 'sortBy', data: 'descend' })"
+        @click="updateLocalMusicXXX({ name: 'sortBy', data: 'descend' })"
         >{{ $t('contextMenu.descendSort') }}</div
       >
       <div
         class="item"
-        @click="updateLocalXXX({ name: 'sortBy', data: 'ascend' })"
+        @click="updateLocalMusicXXX({ name: 'sortBy', data: 'ascend' })"
         >{{ $t('contextMenu.ascendSort') }}</div
       >
       <hr />
@@ -201,15 +189,6 @@
         $t('contextMenu.batchOperation')
       }}</div>
     </ContextMenu>
-
-    <div v-if="!inputFocus" class="position">
-      <div
-        v-if="isLocal && currentTab === 'localSongs'"
-        @click="playingTrackPosition"
-        >{{ $t('localMusic.positionTrack') }}</div
-      >
-      <div @click="scrollToTop">{{ $t('localMusic.scrollToTop') }}</div>
-    </div>
   </div>
 </template>
 
@@ -218,20 +197,18 @@ import { mapState, mapMutations, mapActions } from 'vuex';
 import { randomNum } from '@/utils/common';
 import TrackList from '@/components/TrackList.vue';
 import ContextMenu from '@/components/ContextMenu.vue';
-import CoverRow from '@/components/CoverRow.vue';
+// import CoverRow from '@/components/CoverRow.vue';
+import CoverRow from '@/components/VirtualCoverRow.vue';
 import { getLyric } from '@/api/track';
 import SvgIcon from '@/components/SvgIcon.vue';
 import ModalMatchTrack from '@/components/ModalMatchTrack.vue';
-import {
-  localAlbumParser,
-  localArtistsParser,
-  localTrackParser,
-} from '@/utils/localSongParser';
+import SearchBox from '@/components/SearchBox.vue';
+import { lyricParser } from '@/utils/lyrics';
 import NProgress from 'nprogress';
 
-function extractLyricPart(rawLyric) {
-  return rawLyric.split(']').pop().trim();
-}
+// function extractLyricPart(rawLyric) {
+//   return rawLyric.split(']').pop().trim();
+// }
 
 function getRandomNumbersFromList(list, count) {
   const listCopy = list.slice();
@@ -250,30 +227,39 @@ function getRandomNumbersFromList(list, count) {
 
 export default {
   name: 'LocalMusic',
-  components: { SvgIcon, CoverRow, ContextMenu, TrackList, ModalMatchTrack },
+  components: {
+    SvgIcon,
+    CoverRow,
+    ContextMenu,
+    TrackList,
+    ModalMatchTrack,
+    SearchBox,
+  },
   data() {
     return {
       show: false,
       sortedTracks: [],
       lyric: undefined,
+      randomTrackID: 0,
       lyricSong: undefined,
       isBatchOp: false,
-      selectedTrackIds: [],
       currentTab: null,
-      searchKeyWords: '', // 搜索使用的关键字
-      inputKeywords: '', // 搜索框中正在输入的关键字
-      inputFocus: false,
+      searchKeyWords: '',
       activeTracks: [],
       activeAlbums: [],
       activeArtists: [],
+      noLyricTracks: [],
       randomShowTracks: [],
       timer: null,
     };
   },
   computed: {
-    ...mapState(['data', 'localMusic', 'settings']),
+    ...mapState(['data', 'locals', 'localMusic', 'settings', 'player']),
     isLocal() {
       return this.$store.state.player.currentTrack?.isLocal === true;
+    },
+    isSelectAll() {
+      return this.$refs.trackListRef.isSelectAll;
     },
     sortBy() {
       return this.localMusic.sortBy;
@@ -288,62 +274,37 @@ export default {
           (track.name &&
             track.name
               .toLowerCase()
-              .includes(this.searchKeyWords.toLowerCase())) ||
+              .includes(this.searchKeyWords?.toLowerCase())) ||
           (track.al.name &&
             track.al.name
               .toLowerCase()
-              .includes(this.searchKeyWords.toLowerCase())) ||
+              .includes(this.searchKeyWords?.toLowerCase())) ||
           track.ar.find(
             artist =>
               artist.name &&
               artist.name
                 .toLowerCase()
-                .includes(this.searchKeyWords.toLowerCase())
+                .includes(this.searchKeyWords?.toLowerCase())
           )
       );
     },
     allTracks() {
-      const songs = this.localMusic.songs.filter(
-        s => s.show && s.delete !== true
-      );
-      const tracks = [];
-      for (const song of songs) {
-        const track = localTrackParser(song.id);
-        tracks.push(track);
-      }
+      const tracks = this.localMusic.tracks.filter(t => t.show && !t.delete);
       return tracks;
     },
+    localTrackLenght() {
+      return this.allTracks.length;
+    },
     filterLocalAlbums() {
-      const albums = [];
-      const songs = this.localMusic.songs;
-      for (const song of songs) {
-        if (song.show && song.delete !== true) {
-          const al = localAlbumParser(song.id);
-          const alExist = albums.find(a => a.id === al.id);
-          if (!alExist) {
-            albums.push(al);
-          }
-        }
-      }
-      return [...new Set(albums)].reverse();
+      const albumArray = this.allTracks.map(tr => tr.al);
+      return [...new Map(albumArray.map(al => [al.name, al])).values()];
     },
     filterLocalArtists() {
-      const artists = [];
-      const songs = this.localMusic.songs;
-      for (const song of songs) {
-        if (song.show && song.delete !== true) {
-          const ars = localArtistsParser(song.id);
-          for (const ar of ars) {
-            if (!artists.some(a => a.id === ar.id)) {
-              artists.push(ar);
-            }
-          }
-        }
-      }
-      return [...new Set(artists)].reverse();
+      const artistsArray = this.allTracks?.map(tr => tr.ar).flat(Infinity);
+      return [...new Map(artistsArray.map(ar => [ar.name, ar])).values()];
     },
     filterPlaylists() {
-      return this.localMusic.playlists.slice().reverse();
+      return this.localMusic?.playlists?.slice().reverse();
     },
     pickedLyric() {
       /** @type {string?} */
@@ -351,46 +312,41 @@ export default {
 
       // Returns [] if we got no lyrics.
       if (!lyric) return [];
-
-      let lyricLine = lyric.split('\n').filter(line => line !== '');
-      if (lyricLine.length > 16) {
-        lyricLine = lyricLine.slice(7, -7);
-      }
-
-      // Pick 3 or fewer lyrics based on the lyric lines.
-      const lyricsToPick = Math.min(lyricLine.length, 3);
-
-      // The upperBound of the lyric line to pick
-      const randomUpperBound = lyricLine.length - lyricsToPick;
+      const filterWords =
+        /(作词|作曲|编曲|和声|混音|录音|OP|SP|MV|吉他|二胡|古筝|曲编|键盘|贝斯|鼓|弦乐|打击乐|混音|制作人|配唱|提琴|海报|特别鸣谢)/i;
+      const lyricLines = lyric
+        .filter(l => !filterWords.test(l.content))
+        .map(l => l.content);
+      const lyricsToPick = Math.min(lyricLines.length, 3);
+      const randomUpperBound = lyricLines.length - lyricsToPick;
       const startLyricLineIndex = randomNum(0, randomUpperBound - 1);
-
-      // Pick lyric lines to render.
-      const returnLyricLine = lyricLine
-        .slice(startLyricLineIndex, startLyricLineIndex + lyricsToPick)
-        .map(extractLyricPart);
-      if (returnLyricLine.length > 0 && this.lyricSong) {
-        returnLyricLine.push(`————《${this.lyricSong}》`);
-      }
-      return returnLyricLine;
+      const returnLyric = lyricLines.slice(
+        startLyricLineIndex,
+        startLyricLineIndex + lyricsToPick
+      );
+      returnLyric.push(`————《${this.lyricSong.name}》`);
+      return returnLyric;
     },
   },
   watch: {
-    currentTab(val) {
-      if (val !== 'localSongs' && this.debounceTimeout) {
-        this.searchKeyWords = '';
-        this.inputKeywords = '';
-        clearTimeout(this.debounceTimeout);
-      }
-    },
+    // currentTab(val) {
+    //   if (val !== 'localSongs') {
+    //     this.$parent.$refs.main.style.paddingBottom = '96px';
+    //   } else {
+    //     this.$parent.$refs.main.style.paddingBottom = '0';
+    //   }
+    // },
     sortBy(val) {
       this.activeTracks = this.sortList(this.activeTracks, val);
     },
-    allTracks(val) {
+    localTrackLenght() {
       clearTimeout(this.timer);
       this.timer = setTimeout(() => {
         this.randomShowTracks =
-          val.length > 12 ? getRandomNumbersFromList(val, 12) : val;
-        const tracks = this.sortList(val, this.sortBy);
+          this.allTracks.length > 12
+            ? getRandomNumbersFromList(this.allTracks, 12)
+            : this.allTracks;
+        const tracks = this.sortList(this.allTracks, this.sortBy);
         this.activeTracks = tracks;
         this.activeAlbums = this.filterLocalAlbums;
         this.activeArtists = this.filterLocalArtists;
@@ -400,46 +356,41 @@ export default {
   created() {
     setTimeout(() => {
       if (!this.show) NProgress.start();
-    }, 500);
+    });
     this.currentTab = this.$store.state.settings.localMusicShowDefault;
     this.loadData();
   },
-  activated() {
-    this.$parent.$refs.scrollbar.restorePosition();
+  mounted() {
     this.getRandomLyric();
   },
   methods: {
-    ...mapMutations(['updateData', 'updateLocalXXX', 'updateModal']),
-    ...mapActions(['showToast', 'rmTrackFromLocalPlaylist']),
-    scrollToTop() {
-      this.$parent.$refs.main.scrollTo({ top: 0, behavior: 'smooth' });
-    },
+    ...mapMutations(['updateData', 'updateLocalMusicXXX', 'updateModal']),
+    ...mapActions([
+      'showToast',
+      'rmTrackFromLocalPlaylist',
+      'addTrackToPlayNext',
+    ]),
     loadData() {
       NProgress.done();
       this.show = true;
       this.getRandomLyric();
 
-      let tracks = this.allTracks;
-      const albums = this.filterLocalAlbums;
-      const artists = this.filterLocalArtists;
+      let tracks = this.allTracks.slice();
+      const albums = this.filterLocalAlbums.slice().reverse();
+      const artists = this.filterLocalArtists.slice().reverse();
 
       // 随机显示的12首歌
-      // const idx = tracks.length > 12 ? randomNum(0, tracks.length - 12) : 0;
       this.randomShowTracks =
         tracks.length > 12 ? getRandomNumbersFromList(tracks, 12) : tracks;
-      // this.randomShowTracks = tracks.slice(idx, idx + 12);
       tracks = this.sortList(tracks, this.sortBy);
 
-      // 首页先加载20首歌，20个专辑，20个歌手，1秒后再全部加载
-      this.activeTracks = tracks.slice(0, 20);
-      this.activeAlbums = albums.slice(0, 20);
-      this.activeArtists = artists.slice(0, 20);
-
-      setTimeout(() => {
-        this.activeTracks.push(...tracks.slice(20));
-        this.activeAlbums.push(...albums.slice(20));
-        this.activeArtists.push(...artists.slice(20));
-      }, 1000);
+      // 首页先加载20首歌，20个专辑，20个歌手，然后再异步加载剩余的
+      this.activeTracks = tracks;
+      this.activeAlbums = albums;
+      this.activeArtists = artists;
+    },
+    doFilter(keywrod) {
+      this.searchKeyWords = keywrod;
     },
     playingTrackPosition() {
       const trackref = this.$refs.trackListRef.$refs.trackListItemRef.find(
@@ -449,39 +400,30 @@ export default {
         trackref.$el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     },
-    inputDebounce() {
-      if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = setTimeout(() => {
-        this.searchKeyWords = this.inputKeywords;
-      }, 600);
+    scrollTo(top, behavior = 'smooth') {
+      this.$parent.$refs.main.scrollTo({ top, behavior });
     },
     updateCurrentTab(tab) {
       this.currentTab = tab;
-      this.$parent.$refs.main.scrollTo({ top: 375, behavior: 'smooth' });
+      this.$parent.$refs.main.scrollTo({ top: 305, behavior: 'smooth' });
     },
     selectAll() {
-      this.$refs.trackListRef.$refs.trackListItemRef.forEach(item => {
-        item.isSelected = true;
-      });
+      this.$refs.trackListRef.selectAll();
     },
     batchOpSwitch() {
       this.currentTab = 'localSongs';
       this.updateCurrentTab(this.currentTab);
       this.isBatchOp = !this.isBatchOp;
-      this.$refs.trackListRef.$refs.trackListItemRef.forEach(item => {
-        item.isSelected = false;
-      });
+    },
+    doFinish() {
+      this.isBatchOp = !this.isBatchOp;
+      this.$refs.trackListRef.doFinish();
     },
     batchOperation(type) {
-      const trackIDs = this.$refs.trackListRef.$refs.trackListItemRef
-        .filter(t => t.isSelected)
-        .map(t => t.track.id);
       if (type === 'playlist') {
-        this.$refs.trackListRef.addTrack2LocalPlaylist(trackIDs);
+        this.$refs.trackListRef.addTrack2LocalPlaylist();
       } else if (type === 'queue') {
-        for (const trackID of trackIDs) {
-          this.$refs.trackListRef.addToQueue(trackID);
-        }
+        this.$refs.trackListRef.addToQueue();
         this.showToast('已添加至队列');
       } else if (type === 'recovery') {
         const songs = this.$store.state.localMusic.songs;
@@ -489,7 +431,7 @@ export default {
           song.delete = false;
         });
       } else if (type === 'remove') {
-        trackIDs.forEach(id => {
+        this.$refs.trackListRef.selectedList.forEach(id => {
           const song = this.$store.state.localMusic.songs.find(
             s => s.id === id
           );
@@ -503,10 +445,9 @@ export default {
               tracks: id,
             });
           });
-          this.$store.dispatch('fetchLatestSongs');
         });
       }
-      this.batchOpSwitch();
+      this.doFinish();
     },
     openAddPlaylistModal() {
       this.updateModal({
@@ -523,24 +464,57 @@ export default {
     openPlaylistTabMenu(e) {
       this.$refs.playlistTabMenu.openMenu(e);
     },
-    getRandomLyric() {
-      const tracksID = this.localMusic.latestAddTracks;
-      if (tracksID.length < 1) return;
-      const randomTrackID = tracksID[randomNum(0, tracksID.length - 1)];
-      const track = this.localMusic.tracks
-        .filter(t => t.matched)
-        .find(t => t.onlineTrack.id === randomTrackID);
-      getLyric(randomTrackID).then(data => {
-        if (data.lrc !== undefined) {
-          const isInstrumental = data.lrc.lyric
-            .split('\n')
-            .filter(l => l.includes('纯音乐，请欣赏'));
-          if (isInstrumental.length === 0) {
-            this.lyric = data.lrc.lyric;
-          }
-          this.lyricSong = track.name;
-        }
-      });
+    playThisTrack() {
+      this.player.addTrackToPlayNext(this.randomTrackID, true, true);
+    },
+    async getInnerLyric(filePath) {
+      const data = await fetch(`atom://get-lyric/${filePath}`).then(res =>
+        res.json()
+      );
+      return data;
+    },
+    async getLyricFn(track) {
+      const fnPools = [];
+      let data = {
+        lrc: { lyric: [] },
+        tlyric: { lyric: [] },
+        romalrc: { lyric: [] },
+      };
+      if (track.matched) {
+        fnPools.push([getLyric, track.id]);
+      }
+      fnPools.push([this.getInnerLyric, track.filePath]);
+
+      let [lyricFn, param] = fnPools.shift();
+      data = await lyricFn(param);
+
+      if (!data?.lrc?.lyric && fnPools.length > 0) {
+        [lyricFn, param] = fnPools.shift();
+        data = await lyricFn(param);
+      }
+      return data;
+    },
+    async getRandomLyric() {
+      const randomTrack = this.allTracks.filter(
+        t => !this.noLyricTracks.includes(t)
+      )[randomNum(0, this.allTracks.length - 1)];
+      const data = await this.getLyricFn(randomTrack);
+      if (!data.lrc?.lyric?.length) {
+        this.noLyricTracks.push(randomTrack);
+        this.getRandomLyric();
+        return;
+      }
+      const { lyric } = lyricParser(data);
+      const isInstrumental = lyric.filter(l =>
+        l.content?.includes('纯音乐，请欣赏')
+      );
+      if (isInstrumental.length) {
+        this.noLyricTracks.push(randomTrack);
+        this.getRandomLyric();
+        return;
+      }
+      this.lyric = lyric;
+      this.lyricSong = randomTrack;
     },
     sortList(tracks, type) {
       if (type === 'default') {
@@ -674,62 +648,8 @@ h1 {
 .tabs-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 24px;
-}
-.search-box {
-  display: flex;
-  right: 20px;
-  justify-content: flex-end;
-  -webkit-app-region: no-drag;
-
-  .container {
-    display: flex;
-    align-items: center;
-    height: 32px;
-    background: var(--color-secondary-bg-for-transparent);
-    border-radius: 8px;
-    width: 200px;
-  }
-
-  .svg-icon {
-    height: 15px;
-    width: 15px;
-    color: var(--color-text);
-    opacity: 0.28;
-    margin: {
-      left: 8px;
-      right: 4px;
-    }
-  }
-
-  input {
-    font-size: 16px;
-    border: none;
-    background: transparent;
-    width: 96%;
-    font-weight: 600;
-    margin-top: -1px;
-    color: var(--color-text);
-  }
-
-  .active {
-    background: var(--color-primary-bg-for-transparent);
-    input,
-    .svg-icon {
-      opacity: 1;
-      color: var(--color-primary);
-    }
-  }
-}
-[data-theme='dark'] {
-  .search-box {
-    .active {
-      input,
-      .svg-icon {
-        color: var(--color-text);
-      }
-    }
-  }
 }
 
 .tabs {

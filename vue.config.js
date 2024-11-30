@@ -63,6 +63,26 @@ module.exports = {
       .loader('node-loader')
       .end();
 
+    config.module
+      .rule('worker')
+      .test(/\.worker\.js$/)
+      .use('worker-loader')
+      .loader('worker-loader')
+      .options({
+        inline: 'no-fallback',
+      })
+      .end();
+
+    config.module
+      .rule('webpack4_es_fallback')
+      .test(/\.js$/)
+      .include.add(/node_modules/)
+      .end()
+      .use('esbuild-loader')
+      .loader('esbuild-loader')
+      .options({ target: 'es2015', format: 'cjs' })
+      .end();
+
     // LimitChunkCountPlugin 可以通过合并块来对块进行后期处理。用以解决 chunk 包太多的问题
     config.plugin('chunkPlugin').use(webpack.optimize.LimitChunkCountPlugin, [
       {
@@ -85,8 +105,8 @@ module.exports = {
         publish: [
           {
             provider: 'github',
-            owner: 'qier222',
-            repo: 'YesPlayMusic',
+            owner: 'stark81',
+            repo: 'my_yesplaymusic',
             vPrefixedTagName: true,
             releaseType: 'draft',
           },
@@ -169,6 +189,16 @@ module.exports = {
           'jsbi',
           path.join(__dirname, 'node_modules/jsbi/dist/jsbi-cjs.js')
         );
+
+        config.module
+          .rule('webpack4_es_fallback')
+          .test(/\.js$/)
+          .include.add(/node_modules/)
+          .end()
+          .use('esbuild-loader')
+          .loader('esbuild-loader')
+          .options({ target: 'es2015', format: 'cjs' })
+          .end();
       },
       // 渲染线程的配置文件
       chainWebpackRendererProcess: config => {

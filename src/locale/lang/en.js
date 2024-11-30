@@ -23,6 +23,7 @@ export default {
   },
   library: {
     sLibrary: "'s Library",
+    playCurrentTrack: 'Play This Song',
     likedSongs: 'Liked Songs',
     sLikedSongs: "'s Liked Songs",
     playlists: 'Playlists',
@@ -102,7 +103,7 @@ export default {
     loginWithPhone: 'Login with Phone',
     notice: `YesPlayMusic promises not to save any of your account information to the cloud.<br />
       Your password will be MD5 encrypted locally and then transmitted to NetEase Music API.<br />
-      YesPlayMusic is not the official website of NetEase Music, please consider carefully before entering account information. You can also go to <a href="https://github.com/stark81/YesPlayMusic/">YesPlayMusic's GitHub repository</a> to build and use the self-hosted NetEase Music API.`,
+      YesPlayMusic is not the official website of NetEase Music, please consider carefully before entering account information. You can also go to <a href="https://github.com/stark81/my_yesplaymusic/">YesPlayMusic's GitHub repository</a> to build and use the self-hosted NetEase Music API.`,
     noticeElectron: `Your password will be MD5 encrypted locally and then transmitted to NetEase Music API.<br />
       YesPlayMusic promises not to save any of your account information to the cloud.<br />`,
   },
@@ -126,6 +127,7 @@ export default {
     pause: 'Pause',
     mute: 'Mute',
     nextUp: 'Next Up',
+    osdLyrics: 'OsdLyric',
   },
   modal: {
     close: 'Close',
@@ -172,7 +174,12 @@ export default {
     automaticallyCacheSongs: 'Automatically cache songs',
     clearSongsCache: 'Clear Songs Cache',
     cacheCount: 'Cached {song} songs ({size})',
-    showLyricsTranslation: 'Show lyrics translation & phonetic pronunciation',
+    showLyricsTranslation: {
+      text: 'Show lyrics translation & phonetic pronunciation',
+      never: 'Never',
+      tlyric: 'Translation',
+      rlyric: 'phonetic pronunciation',
+    },
     showTray: 'Show tray icon',
     showControl: 'Show control on tray',
     showStatusBarLyric: 'Show lyrics on tray',

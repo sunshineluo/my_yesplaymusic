@@ -22,20 +22,12 @@
           <span v-if="line.contents[0]">{{ line.contents[0] }}</span>
           <br />
           <span
-            v-if="
-              line.contents[1] &&
-              tagIdx === 1 &&
-              $store.state.settings.showLyricsTranslation
-            "
+            v-if="showTranslation === 'tlyric' && line.contents[1]"
             class="translation"
             >{{ line.contents[1] }}</span
           >
           <span
-            v-if="
-              line.contents[2] &&
-              tagIdx === 2 &&
-              $store.state.settings.showLyricsTranslation
-            "
+            v-if="showTranslation === 'rlyric' && line.contents[2]"
             class="translation"
           >
             {{ line.contents[2] }}</span
@@ -75,6 +67,9 @@ export default {
     currentTrack() {
       return this.player.currentTrack;
     },
+    showTranslation() {
+      return this.settings.showLyricsTranslation;
+    },
     onlineTrackDelay() {
       return this.modals.setLyricDelayModal.delayTime || 0;
     },
@@ -83,25 +78,8 @@ export default {
         ? this.currentTrack.lyricDelay
         : this.onlineTrackDelay;
     },
-    tagIdx() {
-      return this.$parent.tagIdx;
-    },
     isLocal() {
-      return this.player.currentTrack.isLocal === true;
-    },
-    volume: {
-      get() {
-        return this.player.volume;
-      },
-      set(value) {
-        this.player.volume = value;
-      },
-    },
-    imageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=1024y1024';
-    },
-    bgImageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=512y512';
+      return this.player.currentTrack.isLocal || false;
     },
     lyricWithTranslation() {
       let ret = [];
@@ -125,6 +103,8 @@ export default {
             } else {
               lyricItem.contents.push(null);
             }
+          } else {
+            lyricItem.contents.push(null);
           }
           // 歌词音译
           const sameTimeRLyric = this.rlyric.find(
@@ -157,23 +137,21 @@ export default {
     noLyric() {
       return this.lyric.length == 0;
     },
-    artist() {
-      return this.currentTrack?.ar
-        ? this.currentTrack.ar[0]
-        : { id: 0, name: 'unknown' };
+    osdLyric() {
+      return this.settings.showOsdLyric;
     },
-    album() {
-      return this.currentTrack?.al || { id: 0, name: 'unknown' };
+    needToSendLyric() {
+      return this.settings.showOsdLyric || isMac;
     },
-    theme() {
-      return this.settings.lyricsBackground === true ? 'dark' : 'auto';
+    isLyricPage() {
+      return this.showLyrics && this.$parent.show === 'lyric';
     },
   },
   watch: {
     currentTrack() {
       this.getLyric().then(data => {
         this.$parent.hasLyric = data;
-        if (isMac) {
+        if (this.needToSendLyric) {
           const { ipcRenderer } = require('electron');
           const lyric = [
             {
@@ -181,15 +159,15 @@ export default {
               time: 0.0,
               rawTime: '[00:00.000]',
             },
-          ];
-          ipcRenderer.send('sendLyrics', data ? this.lyric : lyric);
+          ].concat(this.lyric);
+          ipcRenderer.send('sendLyrics', [lyric, this.tlyric]);
         }
       });
     },
     lyricDelay(val) {
       clearInterval(this.lyricsInterval);
       this.setLyricsInterval();
-      if (this.isLocal === true) {
+      if (this.isLocal) {
         const track = this.$store.state.localMusic.tracks.find(
           t => t.filePath === this.currentTrack.filePath
         );
@@ -201,7 +179,7 @@ export default {
         this.setLyricsInterval();
         this.$store.commit('enableScrolling', false);
       } else {
-        clearInterval(this.lyricsInterval);
+        // clearInterval(this.lyricsInterval);
         this.$store.commit('enableScrolling', true);
       }
     },
@@ -211,11 +189,16 @@ export default {
     rlyric(val) {
       this.$parent.hasRLyric = val.length > 0 ? true : false;
     },
-  },
-  created() {
-    this.getLyric().then(data => {
-      this.$parent.hasLyric = data;
-      if (isMac) {
+    osdLyric(val) {
+      if (val) {
+        const { ipcRenderer } = require('electron');
+        setTimeout(() => {
+          ipcRenderer.send('lyricIndex', this.highlightLyricIndex);
+        }, 100);
+      }
+    },
+    needToSendLyric(val) {
+      if (val) {
         const { ipcRenderer } = require('electron');
         const lyric = [
           {
@@ -223,11 +206,27 @@ export default {
             time: 0.0,
             rawTime: '[00:00.000]',
           },
-        ];
-        ipcRenderer.send('sendLyrics', data ? this.lyric : lyric);
+        ].concat(this.lyric);
+        ipcRenderer.send('sendLyrics', [lyric, this.tlyric]);
       }
-    });
+    },
+    isLyricPage(val) {
+      if (val) {
+        const el = document.getElementById(`line${this.highlightLyricIndex}`);
+        if (el) {
+          el.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        }
+      }
+    },
+  },
+  created() {
     this.initDate();
+  },
+  mounted() {
+    this.setLyricsInterval();
   },
   beforeDestroy: function () {
     if (this.timer) {
@@ -258,44 +257,99 @@ export default {
         second.padStart(2, '0')
       );
     },
-    getLyric() {
+    async getInnerLyric(filePath) {
+      const data = await fetch(`atom://get-lyric/${filePath}`).then(res =>
+        res.json()
+      );
+      return data;
+    },
+    async getLyric() {
       if (!this.currentTrack.id) return;
-      return getLyric(this.currentTrack.id).then(data => {
-        if (!data?.lrc?.lyric) {
+
+      const fnPools = [];
+      if (this.currentTrack.matched !== false) {
+        fnPools.push([getLyric, this.currentTrack.id]);
+      }
+      if (this.currentTrack.isLocal === true) {
+        fnPools.push([this.getInnerLyric, this.currentTrack.filePath]);
+      }
+
+      let [getLyricFn, param] = fnPools.shift();
+
+      let data = await getLyricFn(param);
+
+      if (!data?.lrc?.lyric && fnPools.length > 0) {
+        [getLyricFn, param] = fnPools.shift();
+        data = await getLyricFn(param);
+      }
+
+      if (!data?.lrc?.lyric) {
+        this.lyric = [];
+        this.tlyric = [];
+        return false;
+      } else {
+        let { lyric, tlyric, rlyric } = lyricParser(data);
+        lyric = lyric.filter(l => !/^作(词|曲)\s*(:|：)\s*无$/.exec(l.content));
+        let includeAM =
+          lyric.length <= 10 &&
+          lyric.map(l => l.content).includes('纯音乐，请欣赏');
+        if (includeAM) {
+          let reg = /^作(词|曲)\s*(:|：)\s*/;
+          let author = this.currentTrack?.ar[0]?.name;
+          lyric = lyric.filter(l => {
+            let regExpArr = l.content.match(reg);
+            return !regExpArr || l.content.replace(regExpArr[0], '') !== author;
+          });
+        }
+        if (lyric.length === 1 && includeAM) {
           this.lyric = [];
           this.tlyric = [];
+          this.rlyric = [];
           return false;
         } else {
-          let { lyric, tlyric, rlyric } = lyricParser(data);
-          lyric = lyric.filter(
-            l => !/^作(词|曲)\s*(:|：)\s*无$/.exec(l.content)
-          );
-          let includeAM =
-            lyric.length <= 10 &&
-            lyric.map(l => l.content).includes('纯音乐，请欣赏');
-          if (includeAM) {
-            let reg = /^作(词|曲)\s*(:|：)\s*/;
-            let author = this.currentTrack?.ar[0]?.name;
-            lyric = lyric.filter(l => {
-              let regExpArr = l.content.match(reg);
-              return (
-                !regExpArr || l.content.replace(regExpArr[0], '') !== author
-              );
-            });
-          }
-          if (lyric.length === 1 && includeAM) {
-            this.lyric = [];
-            this.tlyric = [];
-            this.rlyric = [];
-            return false;
-          } else {
-            this.lyric = lyric;
-            this.tlyric = tlyric;
-            this.rlyric = rlyric;
-            return true;
-          }
+          this.lyric = lyric;
+          this.tlyric = tlyric;
+          this.rlyric = rlyric;
+          return true;
         }
-      });
+      }
+
+      // return getLyric(this.currentTrack.id).then(data => {
+      //   if (!data?.lrc?.lyric) {
+      //     this.lyric = [];
+      //     this.tlyric = [];
+      //     return false;
+      //   } else {
+      //     let { lyric, tlyric, rlyric } = lyricParser(data);
+      //     lyric = lyric.filter(
+      //       l => !/^作(词|曲)\s*(:|：)\s*无$/.exec(l.content)
+      //     );
+      //     let includeAM =
+      //       lyric.length <= 10 &&
+      //       lyric.map(l => l.content).includes('纯音乐，请欣赏');
+      //     if (includeAM) {
+      //       let reg = /^作(词|曲)\s*(:|：)\s*/;
+      //       let author = this.currentTrack?.ar[0]?.name;
+      //       lyric = lyric.filter(l => {
+      //         let regExpArr = l.content.match(reg);
+      //         return (
+      //           !regExpArr || l.content.replace(regExpArr[0], '') !== author
+      //         );
+      //       });
+      //     }
+      //     if (lyric.length === 1 && includeAM) {
+      //       this.lyric = [];
+      //       this.tlyric = [];
+      //       this.rlyric = [];
+      //       return false;
+      //     } else {
+      //       this.lyric = lyric;
+      //       this.tlyric = tlyric;
+      //       this.rlyric = rlyric;
+      //       return true;
+      //     }
+      //   }
+      // });
     },
     formatTrackTime(value) {
       return formatTrackTime(value);
@@ -326,6 +380,10 @@ export default {
           );
         });
         if (oldHighlightLyricIndex !== this.highlightLyricIndex) {
+          if (this.osdLyric) {
+            const { ipcRenderer } = require('electron');
+            ipcRenderer.send('lyricIndex', this.highlightLyricIndex);
+          }
           const el = document.getElementById(`line${this.highlightLyricIndex}`);
           if (el)
             el.scrollIntoView({
@@ -349,78 +407,78 @@ export default {
   }
 }
 
-.right-side {
-  .lyrics-container {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding-left: 78px;
-    max-width: 460px;
-    overflow-y: auto;
+.lyrics-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: scroll;
+  font-weight: 600;
+  padding-left: 4vh;
+  overflow-y: auto;
+  transition: 0.5s;
+  scrollbar-width: none; // firefox
+
+  .line {
+    width: 40vw;
+    margin: 2px 0;
+    padding: 12px;
     transition: 0.5s;
-    scrollbar-width: none; // firefox
+    border-radius: 12px;
 
-    .line {
-      margin: 2px 0;
-      padding: 12px 18px;
-      transition: 0.5s;
-      border-radius: 12px;
-
-      &:hover {
-        background: var(--color-secondary-bg-for-transparent);
-      }
-
-      .content {
-        transform-origin: center left;
-        transform: scale(0.95);
-        transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-
-        span {
-          opacity: 0.28;
-          cursor: default;
-          font-size: 1em;
-          transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-
-        span.translation {
-          opacity: 0.2;
-          font-size: 0.925em;
-        }
-      }
+    &:hover {
+      background: var(--color-secondary-bg-for-transparent);
     }
 
-    .line#line-1:hover {
-      background: unset;
-    }
+    .content {
+      transform-origin: center left;
+      transform: scale(0.95);
+      transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
-    .translation {
-      margin-top: 0.1em;
-    }
-
-    .highlight div.content {
-      // transform: scale(1);
       span {
-        opacity: 0.98;
-        display: inline-block;
+        opacity: 0.28;
+        cursor: default;
+        font-size: 1em;
+        transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
       }
 
       span.translation {
-        opacity: 0.65;
+        opacity: 0.2;
+        font-size: 0.925em;
       }
     }
   }
 
-  ::-webkit-scrollbar {
-    display: none;
+  .line#line-1:hover {
+    background: unset;
   }
 
-  .lyrics-container .line:first-child {
-    margin-top: 50vh;
+  .translation {
+    margin-top: 0.1em;
   }
 
-  .lyrics-container .line:last-child {
-    margin-bottom: calc(50vh - 128px);
+  .highlight div.content {
+    // transform: scale(1);
+    span {
+      opacity: 0.98;
+      display: inline-block;
+    }
+
+    span.translation {
+      opacity: 0.65;
+    }
   }
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+.lyrics-container .line:first-child {
+  margin-top: 50vh;
+}
+
+.lyrics-container .line:last-child {
+  margin-bottom: calc(50vh - 128px);
 }
 
 @media screen and (min-width: 1200px) {

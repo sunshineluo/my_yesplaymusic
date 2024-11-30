@@ -167,7 +167,7 @@
       </div>
 
       <h3 v-show="isMac && isElectron">状态栏</h3>
-      <div v-show="isMac && isElectron" class="item">
+      <!-- <div v-show="isMac && isElectron" class="item">
         <div class="left">
           <div class="title">{{ $t('settings.showTray') }}</div>
         </div>
@@ -182,7 +182,7 @@
             <label for="show-lyrics-tray"></label>
           </div>
         </div>
-      </div>
+      </div> -->
       <div v-show="isMac && isElectron" class="item">
         <div class="left">
           <div class="title">{{ $t('settings.showControl') }}</div>
@@ -192,7 +192,6 @@
             <input
               id="show-lyrics-control"
               v-model="showControl"
-              :disabled="!showTray"
               type="checkbox"
               name="show-lyrics-control"
             />
@@ -209,7 +208,6 @@
             <input
               id="show-lyrics-statusbar"
               v-model="showStatusBarLyric"
-              :disabled="!showTray"
               type="checkbox"
               name="show-lyrics-statusbar"
             />
@@ -217,22 +215,46 @@
           </div>
         </div>
       </div>
+      <div v-show="isMac && isElectron" class="item">
+        <div class="left">
+          <div class="title">{{ $t('settings.showStatusMenu.title') }}</div>
+          <div class="description">
+            {{ $t('settings.showStatusMenu.desc1') }}<br />
+            {{ $t('settings.showStatusMenu.desc2') }}</div
+          >
+        </div>
+        <div>
+          <div class="toggle">
+            <input
+              id="show-lyrics-menu"
+              v-model="showLyricsMenu"
+              type="checkbox"
+              name="show-lyrics-menu"
+            />
+            <label for="show-lyrics-menu"></label>
+          </div>
+        </div>
+      </div>
 
       <h3>歌词</h3>
       <div class="item">
         <div class="left">
-          <div class="title">{{ $t('settings.showLyricsTranslation') }}</div>
+          <div class="title">{{
+            $t('settings.showLyricsTranslation.text')
+          }}</div>
         </div>
         <div class="right">
-          <div class="toggle">
-            <input
-              id="show-lyrics-translation"
-              v-model="showLyricsTranslation"
-              type="checkbox"
-              name="show-lyrics-translation"
-            />
-            <label for="show-lyrics-translation"></label>
-          </div>
+          <select v-model="selectTranslation">
+            <option value="off">
+              {{ $t('settings.showLyricsTranslation.never') }}
+            </option>
+            <option value="tlyric">
+              {{ $t('settings.showLyricsTranslation.tlyric') }}
+            </option>
+            <option value="rlyric">
+              {{ $t('settings.showLyricsTranslation.rlyric') }}
+            </option>
+          </select>
         </div>
       </div>
       <div class="item">
@@ -501,29 +523,71 @@
       <div v-if="isElectron" class="item">
         <div class="left">
           <div class="title">
-            {{ $t('settings.localMusicShowDefault.text') }}
+            {{ $t('settings.localMusic.localMusicShowDefault.text') }}
           </div>
         </div>
         <div class="right">
           <select v-model="showDefault">
             <option value="localSongs">{{
-              $t('settings.localMusicShowDefault.localSongs')
+              $t('settings.localMusic.localMusicShowDefault.localSongs')
             }}</option>
             <option value="playlists">{{
-              $t('settings.localMusicShowDefault.playlists')
+              $t('settings.localMusic.localMusicShowDefault.playlists')
             }}</option>
             <option value="albums">{{
-              $t('settings.localMusicShowDefault.albums')
+              $t('settings.localMusic.localMusicShowDefault.albums')
             }}</option>
             <option value="artists">{{
-              $t('settings.localMusicShowDefault.artists')
+              $t('settings.localMusic.localMusicShowDefault.artists')
             }}</option>
           </select>
         </div>
       </div>
       <div v-if="isElectron" class="item">
         <div class="left">
-          <div class="title">导出本地歌曲信息</div>
+          <div class="title">
+            {{ $t('settings.localMusic.localMusicFirst.title') }}
+          </div>
+          <div class="description">
+            {{ $t('settings.localMusic.localMusicFirst.desc') }}
+          </div>
+        </div>
+        <div class="right">
+          <div class="toggle">
+            <input
+              id="local-music-first"
+              v-model="localMusicFirst"
+              type="checkbox"
+            />
+            <label for="local-music-first" />
+          </div>
+        </div>
+      </div>
+      <div v-if="isElectron" class="item">
+        <div class="left">
+          <div class="title">
+            {{ $t('settings.localMusic.matchStatus.title') }}
+          </div>
+          <div class="description">
+            {{ $t('settings.localMusic.matchStatus.desc') }}
+          </div>
+        </div>
+        <div class="right">
+          <div class="toggle">
+            <input
+              id="local-music-match-status"
+              v-model="localMusicMatchStatus"
+              type="checkbox"
+            />
+            <label for="local-music-match-status" />
+          </div>
+        </div>
+      </div>
+      <div v-if="isElectron" class="item">
+        <div class="left">
+          <div class="title">{{
+            $t('settings.localMusic.exportLocalMusic')
+          }}</div>
         </div>
         <div class="right">
           <button @click="exportLocalMusic">导出</button>
@@ -531,7 +595,9 @@
       </div>
       <div v-if="isElectron" class="item">
         <div class="left">
-          <div class="title">导入本地歌曲信息</div>
+          <div class="title">{{
+            $t('settings.localMusic.importLocalMusic')
+          }}</div>
         </div>
         <div class="right">
           <button @click="importLocalMusic">导入</button>
@@ -545,7 +611,9 @@
       />
       <div v-if="isElectron" class="item">
         <div class="left">
-          <div class="title">清空本地歌曲信息</div>
+          <div class="title">{{
+            $t('settings.localMusic.clearLocalMusic')
+          }}</div>
         </div>
         <div class="right">
           <button @click="deleteLocalMusic">确定</button>
@@ -554,7 +622,8 @@
       <div v-if="isElectron" class="item">
         <div class="left">
           <div class="title"
-            >本地歌曲扫描路径: {{ settings.localMusicFolderPath }}</div
+            >{{ $t('settings.localMusic.localMusicPath') }}:
+            {{ settings.localMusicFolderPath }}</div
           >
         </div>
         <div class="right">
@@ -564,17 +633,18 @@
           <button v-else @click="choseDir">选择</button>
         </div>
       </div>
-      <div v-if="isElectron" class="item">
+      <!-- <div v-if="isElectron" class="item">
         <div class="left">
           <div class="title"
-            >本地歌曲匹配状态: {{ updateFlag ? '正常' : '已暂停' }}</div
+            >{{ $t('settings.localMusic.localMusicMatchedStatus') }}:
+            {{ updateFlag ? '正常' : '已暂停' }}</div
           >
         </div>
         <div class="right">
           <button v-if="updateFlag" @click="changeUpdateStatus">暂停</button>
           <button v-else @click="changeUpdateStatus">开始</button>
         </div>
-      </div>
+      </div> -->
 
       <h3>其他</h3>
       <div class="item">
@@ -859,8 +929,8 @@ import { isLooseLoggedIn, doLogout } from '@/utils/auth';
 import { auth as lastfmAuth } from '@/api/lastfm';
 import { changeAppearance, bytesToSize } from '@/utils/common';
 import { countDBSize, clearDB } from '@/utils/db';
+import { importFromJson } from '@/utils/migrations';
 import pkg from '../../package.json';
-// import { debounce } from 'lodash';
 
 const electron =
   process.env.IS_ELECTRON === true ? window.require('electron') : null;
@@ -896,13 +966,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(['player', 'settings', 'data', 'lastfm', 'updateFlag']),
-    localMusicPath() {
-      return this.settings.localMusicFolderPath;
-    },
-    // localSongsLength() {
-    //   return this.$store.state.localMusic.songs.length;
-    // },
+    ...mapState(['player', 'settings', 'data', 'lastfm']),
     isElectron() {
       return process.env.IS_ELECTRON;
     },
@@ -1108,7 +1172,7 @@ export default {
         }
       },
     },
-    showLyricsTranslation: {
+    selectTranslation: {
       get() {
         return this.settings.showLyricsTranslation;
       },
@@ -1122,18 +1186,6 @@ export default {
     localMusicFolderPath() {
       return this.settings.localMusicFolderPath;
     },
-    showTray: {
-      get() {
-        return this.settings.showTray;
-      },
-      set(value) {
-        ipcRenderer.send('switchShowTray', 'switchShowTray');
-        this.$store.commit('updateSettings', {
-          key: 'showTray',
-          value,
-        });
-      },
-    },
     showStatusBarLyric: {
       get() {
         return this.settings.showStatusBarLyric;
@@ -1142,6 +1194,17 @@ export default {
         ipcRenderer.send('switchShowTray', 'switchLyric');
         this.$store.commit('updateSettings', {
           key: 'showStatusBarLyric',
+          value,
+        });
+      },
+    },
+    showLyricsMenu: {
+      get() {
+        return this.settings.showLyricsMenu;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'showLyricsMenu',
           value,
         });
       },
@@ -1157,6 +1220,11 @@ export default {
           value,
         });
       },
+    },
+    enableMenu() {
+      return (
+        this.showLyricsMenu && !this.showControl && !this.showStatusBarLyric
+      );
     },
     lyricsBackground: {
       get() {
@@ -1330,6 +1398,28 @@ export default {
         });
       },
     },
+    localMusicFirst: {
+      get() {
+        return this.settings.localMusicFirst;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'localMusicFirst',
+          value: value || false,
+        });
+      },
+    },
+    localMusicMatchStatus: {
+      get() {
+        return this.settings.localMusicMatchStatus;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'localMusicMatchStatus',
+          value: value || false,
+        });
+      },
+    },
     unmEnableFlac: {
       get() {
         return this.settings.unmEnableFlac || false;
@@ -1401,15 +1491,17 @@ export default {
     },
   },
   watch: {
-    async localMusicPath() {
-      localStorage.removeItem('player');
-      this.$store.commit('clearLocalMusic');
-      this.$store.dispatch('fetchLatestSongs');
-      await this.loadLocalMusic();
-      await this.updateTracks();
-      this.$store.dispatch('fetchLatestSongs');
-      setTimeout(() => {}, 10 * 1000);
-      await this.updateArtists();
+    enableMenu(value) {
+      ipcRenderer.send('enableTrayMenu', value);
+      if (value) {
+        ipcRenderer.send('updateTrayPlayState', this.player.playing);
+        const liked = this.$store.state.liked.songs.includes(
+          this.player.currentTrack.id
+        );
+        ipcRenderer.send('updateTrayLikeState', liked);
+        ipcRenderer.send('switchRepeatMode', this.player.repeatMode);
+        ipcRenderer.send('switchShuffle', this.player.shuffle);
+      }
     },
   },
   created() {
@@ -1421,27 +1513,25 @@ export default {
     if (process.env.IS_ELECTRON) this.getAllOutputDevices();
   },
   methods: {
-    ...mapActions([
-      'showToast',
-      'loadLocalMusic',
-      'updateTracks',
-      'updateArtists',
-    ]),
+    ...mapActions(['showToast']),
     deleteLocalMusic() {
-      this.$store.state.localMusic = {
+      this.$store.commit('updateSettings', {
+        key: 'localMusicFolderPath',
+        value: null,
+      });
+      const musicObj = {
+        version: 'v1',
         trackIdCounter: 1,
         albumsIdCounter: 1,
         artistsIdCounter: 1,
         playlistIdCounter: 1,
-        songs: [],
-        latestAddTracks: [], // 只有前12首
         playlists: [],
         tracks: [],
-        albums: [],
-        artists: [],
         sortBy: 'default',
       };
-      this.$store.state.settings.localMusicFolderPath = null;
+      this.$store.commit('updateLocalMusic', musicObj);
+      localStorage.setItem('localMusic', musicObj);
+      this.showToast('已清除本地音乐信息');
     },
     importLocalMusic() {
       this.$refs.selectFileInput.click();
@@ -1455,9 +1545,32 @@ export default {
           return;
         }
         const jsonData = JSON.parse(data);
-        this.$store.state.localMusic = jsonData;
-        this.$store.dispatch('fetchLatestSongs');
-        this.showToast('导入完成');
+        if (jsonData.version === 'v1') {
+          this.$store.commit('updateLocalMusic', jsonData);
+        } else {
+          importFromJson(jsonData).then(({ playlists, tracks }) => {
+            const albumArray = tracks.map(tr => tr.al);
+            const albums = [
+              ...new Map(albumArray.map(a => [a.id, a])).values(),
+            ];
+            const artistArray = tracks.map(tr => tr.ar).flat(Infinity);
+            const artists = [
+              ...new Map(artistArray.map(a => [a.id, a])).values(),
+            ];
+            const data = {
+              version: 'v1',
+              trackIdCounter: tracks.length + 1,
+              albumsIdCounter: albums.length + 1,
+              artistsIdCounter: artists.length + 1,
+              playlistIdCounter: playlists.length + 1,
+              playlists: playlists,
+              tracks: tracks,
+              sortBy: jsonData.sortBy,
+            };
+            this.$store.commit('updateLocalMusic', data);
+            this.showToast('导入成功');
+          });
+        }
       });
     },
     exportLocalMusic() {
@@ -1466,16 +1579,25 @@ export default {
       const localMusic = this.$store.state.localMusic;
       const localMusicJson = JSON.stringify(localMusic);
 
-      ipcRenderer.send('selectFolder');
-      ipcRenderer.on('selected-folder', (event, folderPath) => {
+      ipcRenderer.invoke('selected-folder').then(folderPath => {
         if (folderPath) {
           const path = require('path');
-          const filePath = path.join(folderPath, 'localMusic.json');
+          const getDate = () => {
+            const date = new Date();
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return date === 0 ? null : `${year}${month}${day}`;
+          };
+          const filePath = path.join(
+            folderPath,
+            `localMusic-${localMusic.version}-${getDate()}.json`
+          );
           fs.writeFile(filePath, localMusicJson, 'utf8', err => {
             if (err) {
-              console.error('Failed to save state of localMusic:', err);
+              this.showToast(`导出失败: ${err}`);
             } else {
-              console.log('State of localMusic saved successfully');
+              this.showToast('导出成功');
             }
           });
         }
@@ -1483,8 +1605,7 @@ export default {
     },
     choseDir() {
       const { ipcRenderer } = require('electron');
-      ipcRenderer.send('selectFolder');
-      ipcRenderer.on('selected-folder', (event, folderPath) => {
+      ipcRenderer.invoke('selected-folder').then(folderPath => {
         if (folderPath) {
           this.$store.commit('updateSettings', {
             key: 'localMusicFolderPath',
@@ -1492,9 +1613,6 @@ export default {
           });
         }
       });
-    },
-    changeUpdateStatus() {
-      this.$store.commit('toggleUpdateStatus');
     },
     getAllOutputDevices() {
       navigator.mediaDevices.enumerateDevices().then(devices => {

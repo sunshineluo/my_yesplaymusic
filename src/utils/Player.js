@@ -3,15 +3,14 @@ import { getArtist } from '@/api/artist';
 import { trackScrobble, trackUpdateNowPlaying } from '@/api/lastfm';
 import { fmTrash, personalFM } from '@/api/others';
 import { getPlaylistDetail, intelligencePlaylist } from '@/api/playlist';
-import { getMP3, getTrackDetail, scrobble } from '@/api/track';
+import { getMP3, getTrackDetail } from '@/api/track';
 import store from '@/store';
 import { isAccountLoggedIn } from '@/utils/auth';
 import { cacheTrackSource, getTrackSource } from '@/utils/db';
-import { isCreateMpris, isCreateTray } from '@/utils/platform';
+import { isCreateMpris, isCreateTray, isMac } from '@/utils/platform';
 import { Howl, Howler } from 'howler';
 import shuffle from 'lodash/shuffle';
 import { decode as base642Buffer } from '@/utils/base64';
-import { localTrackParser } from '@/utils/localSongParser';
 
 const PLAY_PAUSE_FADE_DURATION = 200;
 
@@ -44,7 +43,7 @@ function setTitle(track) {
   document.title = track
     ? `${track.name} · ${track.ar[0].name} - YesPlayMusic`
     : 'YesPlayMusic';
-  if (isCreateTray) {
+  if (!isMac) {
     ipcRenderer?.send('updateTrayTooltip', document.title);
   }
   store.commit('updateTitle', document.title);
@@ -73,6 +72,8 @@ export default class {
     // 播放信息
     this._list = []; // 播放列表
     this._isLocal = false;
+    this._localPic = null;
+    this._localID = null;
     this._current = 0; // 当前播放歌曲在播放列表里的index
     this._shuffledList = []; // 被随机打乱的播放列表，随机播放模式下会使用此播放列表
     this._shuffledCurrent = 0; // 当前播放歌曲在随机列表里面的index
@@ -307,11 +308,11 @@ export default class {
     );
     const trackDuration = ~~(track.dt / 1000);
     time = completed ? trackDuration : ~~time;
-    scrobble({
-      id: track.id,
-      sourceid: this.playlistSource.id,
-      time,
-    });
+    // scrobble({
+    //   id: track.id,
+    //   sourceid: this.playlistSource.id,
+    //   time,
+    // });
     if (
       store.state.lastfm.key !== undefined &&
       (time >= trackDuration / 2 || time >= 240)
@@ -322,7 +323,7 @@ export default class {
         track: track.name,
         timestamp,
         album: track.al.name,
-        trackNumber: track.no,
+        trackNumber: track.no || 1,
         duration: trackDuration,
       });
     }
@@ -476,7 +477,7 @@ export default class {
     return this._getAudioSourceBlobURL(buffer);
   }
   _getAudioSource(track) {
-    if (track.isLocal) {
+    if (track.isLocal === true) {
       const getLocalMusic = track => {
         return new Promise(resolve => {
           const source = `file://${track.filePath}`;
@@ -501,23 +502,37 @@ export default class {
     autoplay = true,
     ifUnplayableThen = UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK
   ) {
-    if (autoplay && this._currentTrack.name && !this._isLocal) {
+    if (
+      autoplay &&
+      this._currentTrack.name &&
+      this._currentTrack.matched !== false
+    ) {
       this._scrobble(this.currentTrack, this._howler?.seek());
     }
     const getLocalMusic = id => {
-      const matchTrack = store?.state.localMusic.tracks.find(
-        t => t.onlineTrack?.id === id
-      );
-      if (matchTrack) {
-        store.dispatch('showToast', `使用本地文件播放歌曲：${matchTrack.name}`);
-      }
       return new Promise(resolve => {
-        const track = localTrackParser(matchTrack ? matchTrack.id : id, true);
-        resolve({ songs: [track] });
+        const localMusic = store
+          ? store.state.localMusic
+          : JSON.parse(localStorage.getItem('localMusic'));
+        const settings = store
+          ? store.state.settings
+          : JSON.parse(localStorage.getItem('settings'));
+        const matchTrack = localMusic.tracks?.find(track => track.id === id);
+        if (matchTrack && settings.localMusicFirst) {
+          resolve({ songs: [matchTrack] });
+          if (this.isLocal !== true) {
+            store?.dispatch(
+              'showToast',
+              `使用本地文件播放歌曲：${matchTrack.name}`
+            );
+          }
+        }
+        resolve({ songs: [] });
       });
     };
     return getLocalMusic(id)
       .then(data => {
+        this._localID = id;
         return data.songs[0] ? data : getTrackDetail(id);
       })
       .then(data => {
@@ -621,29 +636,41 @@ export default class {
       });
     }
   }
-  _updateMediaSessionMetaData(track) {
+  async _updateMediaSessionMetaData(track) {
     if ('mediaSession' in navigator === false) {
       return;
     }
+    if (this._localPic) {
+      URL.revokeObjectURL(this._localPic);
+      this._localPic = null;
+    }
     let artists = track.ar.map(a => a.name);
+    const useLocal = track.isLocal && !track.matched;
+    if (useLocal) {
+      const blob = await fetch(`atom://get-pic/${track.filePath}`).then(res =>
+        res.blob()
+      );
+      this._localPic = URL.createObjectURL(blob);
+    }
     const metadata = {
       title: track.name,
       artist: artists.join(','),
-      album: track.al.name,
+      album: track.al.name ?? track.album.name,
       artwork: [
         {
-          src: track.al.picUrl + '?param=224y224',
+          src: useLocal ? this._localPic : track.al.picUrl + '?param=224y224',
           type: 'image/jpg',
           sizes: '224x224',
         },
         {
-          src: track.al.picUrl + '?param=512y512',
+          src: useLocal ? this._localPic : track.al.picUrl + '?param=512y512',
           type: 'image/jpg',
           sizes: '512x512',
         },
       ],
       length: this.currentTrackDuration,
       trackId: this.current,
+      url: '/trackid/' + track.id,
     };
 
     navigator.mediaSession.metadata = new window.MediaMetadata(metadata);
@@ -664,7 +691,7 @@ export default class {
     }
   }
   _nextTrackCallback() {
-    if (!this._isLocal) {
+    if (this._currentTrack.matched !== false) {
       this._scrobble(this._currentTrack, 0, true);
     }
     if (!this.isPersonalFM && this.repeatMode === 'one') {
@@ -832,7 +859,7 @@ export default class {
           artist: this.currentTrack.ar[0].name,
           track: this.currentTrack.name,
           album: this.currentTrack.al.name,
-          trackNumber: this.currentTrack.no,
+          trackNumber: this.currentTrack.no || 1,
           duration: ~~(this.currentTrack.dt / 1000),
         });
       }
@@ -876,8 +903,7 @@ export default class {
   ) {
     this._isPersonalFM = false;
     if (!this._enabled) this._enabled = true;
-    this._isLocal = playlistSourceType === 'localMusic' ? true : false;
-    playlistSourceType = this._isLocal ? 'artist' : playlistSourceType;
+    this._isLocal = playlistSourceType.includes('local');
     this.list = trackIDs;
     this.current = 0;
     this._playlistSource = {
@@ -931,8 +957,10 @@ export default class {
       });
     });
   }
-  addTrackToPlayNext(trackID, playNow = false) {
-    this._playNextList.push(trackID);
+  addTrackToPlayNext(trackID, playNow = false, addTohead = false) {
+    addTohead
+      ? this._playNextList.unshift(trackID)
+      : this._playNextList.push(trackID);
     if (playNow) {
       this.playNextTrack();
     }
@@ -961,6 +989,7 @@ export default class {
     ipcRenderer?.send('player', {
       playing: this.playing,
       likedCurrentTrack: liked,
+      isPersionalFM: this._isPersonalFM,
     });
     setTrayLikeState(liked);
   }
@@ -973,15 +1002,11 @@ export default class {
     } else {
       this.repeatMode = 'on';
     }
-    if (isCreateMpris) {
-      ipcRenderer?.send('switchRepeatMode', this.repeatMode);
-    }
+    ipcRenderer?.send('switchRepeatMode', this.repeatMode);
   }
   switchShuffle() {
     this.shuffle = !this.shuffle;
-    if (isCreateMpris) {
-      ipcRenderer?.send('switchShuffle', this.shuffle);
-    }
+    ipcRenderer?.send('switchShuffle', this.shuffle);
   }
   switchReversed() {
     this.reversed = !this.reversed;

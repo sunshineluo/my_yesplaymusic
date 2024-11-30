@@ -8,11 +8,25 @@ export default {
       state.player.sendSelfToIpcMain();
     }
   },
-  addLocalXXX(state, { name, data }) {
-    state.localMusic[name].push(data);
+  updateOsdLyric(state) {
+    state.osdlyrics.show = !state.osdlyrics.show;
   },
-  updateLocalXXX(state, { name, data }) {
+  addLocalMusicXXX(state, { name, data }) {
+    // data 必须是Array类型
+    state.localMusic[name].push(...data);
+  },
+  updateLocalMusic(state, data) {
+    state.localMusic = cloneDeep(data);
+  },
+  updateLocalMusicXXX(state, { name, data }) {
     state.localMusic[name] = data;
+  },
+  updateLocalsXXX(state, { name, type, data }) {
+    if (type === 'push') {
+      state.locals[name].push(data);
+    } else {
+      state.locals[name] = data;
+    }
   },
   setDelayTime(state, { filePath, delayTime }) {
     const track = state.localMusic.tracks.find(t => t.filePath === filePath);
@@ -87,8 +101,12 @@ export default {
   restoreDefaultShortcuts(state) {
     state.settings.shortcuts = cloneDeep(shortcuts);
   },
+  setVirtualScroll(state, status = null) {
+    state.enabledVirtualScroll =
+      status !== null ? status : !state.enabledVirtualScroll;
+  },
   enableScrolling(state, status = null) {
-    state.enableScrolling = status ? status : !state.enableScrolling;
+    state.enableScrolling = status !== null ? status : !state.enableScrolling;
   },
   updateTitle(state, title) {
     state.title = title;

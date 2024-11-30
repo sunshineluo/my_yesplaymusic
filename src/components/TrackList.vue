@@ -2,10 +2,7 @@
   <div class="track-list">
     <ContextMenu ref="menu">
       <div v-show="type !== 'cloudDisk'" class="item-info">
-        <img
-          :src="rightClickedTrackComputed.al.picUrl | resizeImage(224)"
-          loading="lazy"
-        />
+        <img :src="imageUrl" loading="lazy" />
         <div class="info">
           <div class="title">{{ rightClickedTrackComputed.name }}</div>
           <div class="subtitle">{{ rightClickedTrackComputed.ar[0].name }}</div>
@@ -13,20 +10,20 @@
       </div>
       <hr v-show="type !== 'cloudDisk'" />
       <div class="item" @click="play">{{ $t('contextMenu.play') }}</div>
-      <div class="item" @click="addToQueue(rightClickedTrack.id)">{{
+      <div class="item" @click="addToQueue([rightClickedTrack.id])">{{
         $t('contextMenu.addToQueue')
       }}</div>
-      <div
-        v-if="extraContextMenuItem.includes('reMatch')"
-        class="item"
-        @click="reMatchTrack"
-        >{{ $t('contextMenu.reMatchTrack') }}</div
-      >
       <div
         v-if="extraContextMenuItem.includes('accurateMatch')"
         class="item"
         @click="accurateMatchTrack"
         >{{ $t('contextMenu.accurateMatch') }}</div
+      >
+      <div
+        v-if="extraContextMenuItem.includes('deleteMatch')"
+        class="item"
+        @click="deleteMatch"
+        >{{ $t('contextMenu.deleteMatch') }}</div
       >
       <div
         v-if="extraContextMenuItem.includes('addToLocalList')"
@@ -41,6 +38,12 @@
         >{{ $t('contextMenu.removeFromQueue') }}</div
       >
       <div
+        v-if="extraContextMenuItem.includes('showInFolder')"
+        class="item"
+        @click="showInFolder"
+        >{{ $t('contextMenu.showInFolder') }}</div
+      >
+      <div
         v-if="extraContextMenuItem.includes('removeLocalTrack')"
         class="item"
         @click="removeLocalTrack"
@@ -51,7 +54,7 @@
         v-show="
           !isRightClickedTrackLiked &&
           type !== 'cloudDisk' &&
-          rightClickedTrack.isLocal !== true
+          !rightClickedTrack.isLocal
         "
         class="item"
         @click="like"
@@ -62,7 +65,7 @@
         v-show="
           isRightClickedTrackLiked &&
           type !== 'cloudDisk' &&
-          rightClickedTrack.isLocal !== true
+          !rightClickedTrack.isLocal
         "
         class="item"
         @click="like"
@@ -82,7 +85,7 @@
         >{{ $t('contextMenu.addToPlaylist') }}</div
       >
       <div
-        v-show="type !== 'cloudDisk' && rightClickedTrack.isLocal !== true"
+        v-show="type !== 'cloudDisk' && !rightClickedTrack.isLocal"
         class="item"
         @click="copyLink"
         >{{ $t('contextMenu.copyUrl') }}</div
@@ -95,19 +98,30 @@
       >
     </ContextMenu>
 
-    <div :style="listStyles">
-      <TrackListItem
-        v-for="(track, index) in tracks"
-        ref="trackListItemRef"
-        :key="itemKey === 'id' ? track.id : `${track.id}${index}`"
-        :track-prop="track"
-        :track-no="index + 1"
-        :batch-op="isBatchOp"
-        :highlight-playing-track="highlightPlayingTrack"
-        @dblclick.native="playThisList(track.id || track.songId)"
-        @click.right.native="openMenu($event, track, index)"
-      />
-    </div>
+    <VirtualScroll
+      ref="virtualScrollRef"
+      :list="tracks"
+      :column-number="columnNumber"
+      :show-position="showPosition"
+      :item-size="itemSize"
+      :type="type"
+      :enabled="enabled"
+    >
+      <template #default="{ item, index }">
+        <TrackListItem
+          ref="trackListItemRef"
+          :key="itemKey === 'id' ? item.id : `${item.id}${index}`"
+          :track-prop="item"
+          :type="type"
+          :track-no="index + 1"
+          :album-object="albumObject"
+          :batch-op="isBatchOp"
+          :highlight-playing-track="highlightPlayingTrack"
+          @dblclick.native="playThisList(item.id || item.songId)"
+          @click.right.native="openMenu($event, item, index)"
+        />
+      </template>
+    </VirtualScroll>
   </div>
 </template>
 
@@ -118,6 +132,7 @@ import { cloudDiskTrackDelete } from '@/api/user';
 import { isAccountLoggedIn } from '@/utils/auth';
 
 import TrackListItem from '@/components/TrackListItem.vue';
+import VirtualScroll from '@/components/VirtualScroll.vue';
 import ContextMenu from '@/components/ContextMenu.vue';
 import locale from '@/locale';
 
@@ -126,6 +141,7 @@ export default {
   components: {
     TrackListItem,
     ContextMenu,
+    VirtualScroll,
   },
   props: {
     tracks: {
@@ -141,6 +157,11 @@ export default {
     id: {
       type: Number,
       default: 0,
+    },
+    showPosition: { type: Boolean, default: true },
+    enabled: {
+      type: Boolean,
+      default: true,
     },
     dbclickTrackFunc: {
       type: String,
@@ -168,7 +189,7 @@ export default {
     },
     columnNumber: {
       type: Number,
-      default: 4,
+      default: 1,
     },
     highlightPlayingTrack: {
       type: Boolean,
@@ -182,6 +203,10 @@ export default {
       type: String,
       default: 'id',
     },
+    itemSize: {
+      type: Number,
+      default: 64,
+    },
   },
   data() {
     return {
@@ -192,7 +217,7 @@ export default {
         al: { picUrl: '' },
       },
       rightClickedTrackIndex: -1,
-      listStyles: {},
+      selectedList: [],
     };
   },
   computed: {
@@ -210,15 +235,26 @@ export default {
           }
         : this.rightClickedTrack;
     },
+    isSelectAll() {
+      return this.selectedList.length === this.tracks.length;
+    },
+    useLocal() {
+      return (
+        this.rightClickedTrackComputed.isLocal &&
+        !this.rightClickedTrackComputed.matched
+      );
+    },
+    imageUrl() {
+      return this.useLocal
+        ? `atom://get-pic/${this.rightClickedTrackComputed.filePath}`
+        : this.rightClickedTrackComputed.al.picUrl + '?param=64y64';
+    },
   },
-  created() {
-    if (this.type === 'tracklist') {
-      this.listStyles = {
-        display: 'grid',
-        gap: '4px',
-        gridTemplateColumns: `repeat(${this.columnNumber}, 1fr)`,
-      };
-    }
+  mounted() {
+    this.$parent.$parent.$refs.main.style.paddingBottom = '0';
+  },
+  beforeDestroy() {
+    this.$parent.$parent.$refs.main.style.paddingBottom = '96px';
   },
   methods: {
     ...mapMutations(['updateModal']),
@@ -226,9 +262,8 @@ export default {
       'nextTrack',
       'showToast',
       'likeATrack',
-      'fetchLatestSongs',
+      'deleteMatchTrack',
       'rmTrackFromLocalPlaylist',
-      'rematchSong',
     ]),
     openMenu(e, track, index = -1) {
       this.rightClickedTrack = track;
@@ -272,28 +307,37 @@ export default {
       } else if (this.type === 'tracklist') {
         let trackIDs = this.tracks.map(t => t.id);
         this.player.replacePlaylist(trackIDs, this.id, 'artist', trackID);
-      } else if (this.type === 'localtracks') {
+      } else if (this.type === 'localTracks') {
         let trackIDs = this.tracks.map(t => t.id);
-        this.player.replacePlaylist(trackIDs, this.id, 'localMusic', trackID);
+        this.player.replacePlaylist(trackIDs, this.id, 'localTracks', trackID);
       }
+    },
+    scrollTo(top, behavior = 'smooth') {
+      this.$parent.scrollTo(top, behavior);
     },
     play() {
       this.player.addTrackToPlayNext(this.rightClickedTrack.id, true);
     },
-    addToQueue(trackID) {
-      this.player.addTrackToPlayNext(trackID);
+    addToQueue(trackID = []) {
+      if (!trackID.length) {
+        trackID = this.selectedList;
+      }
+      for (let id of trackID) {
+        this.player.addTrackToPlayNext(id);
+      }
+    },
+    selectAll() {
+      if (this.isSelectAll) {
+        this.selectedList = [];
+      } else {
+        this.selectedList = this.tracks.map(t => t.id);
+      }
+    },
+    doFinish() {
+      this.selectedList = [];
     },
     like() {
       this.likeATrack(this.rightClickedTrack.id);
-    },
-    async reMatchTrack() {
-      const song = this.$store.state.localMusic.songs.find(
-        s => s.id === this.rightClickedTrack.id
-      );
-      const code = await this.rematchSong(song.id);
-      if (code === 'err') {
-        await this.rematchSong(song.id, false);
-      }
     },
     accurateMatchTrack() {
       this.updateModal({
@@ -306,6 +350,15 @@ export default {
         key: 'selectedTrackID',
         value: this.rightClickedTrack.id,
       });
+    },
+    deleteMatch() {
+      if (this.useLocal) {
+        this.showToast('该歌曲没有匹配信息');
+        return;
+      }
+      if (confirm('确定清除当前歌曲的匹配信息？')) {
+        this.deleteMatchTrack(this.rightClickedTrackComputed.id);
+      }
     },
     addTrackToPlaylist(useOnline = false) {
       if (!isAccountLoggedIn()) {
@@ -325,23 +378,24 @@ export default {
           : this.rightClickedTrack.onlineTrack.id,
       });
     },
-    removeLocalTrack() {
-      const song = this.$store.state.localMusic.songs.find(
-        s => s.id === this.rightClickedTrack.id
-      );
-      song.delete = true;
-      const playlists = this.$store.state.localMusic.playlists.filter(p =>
-        p.trackIds.includes(song.id)
-      );
-      playlists.forEach(playlist => {
-        this.rmTrackFromLocalPlaylist({
-          pid: playlist.id,
-          tracks: song.id,
-        });
-      });
-      this.fetchLatestSongs();
+    showInFolder() {
+      const songID = this.rightClickedTrack.id;
+      const { songs, tracks } = this.$store.state.localMusic;
+      const song = songs.find(s => s.id === songID);
+      const track = tracks.find(t => t.id === song.trackID);
+      const filePath = track.filePath;
+      const { shell } = require('electron');
+      shell.showItemInFolder(filePath);
     },
-    addTrack2LocalPlaylist(trackIDs) {
+    removeLocalTrack() {
+      this.$store.dispatch('removeLocalTrack', {
+        id: this.rightClickedTrack.id,
+      });
+    },
+    addTrack2LocalPlaylist(trackIDs = []) {
+      if (!trackIDs.length) {
+        trackIDs = this.selectedList;
+      }
       this.updateModal({
         modalName: 'addTrackToPlaylistModal',
         key: 'isLocal',

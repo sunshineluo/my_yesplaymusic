@@ -1,53 +1,37 @@
-const { app, Menu, Tray } = require('electron');
-import path from 'path';
+import { app, Menu, ipcMain } from 'electron';
+
+var isPlaying = false;
 
 export function createDockMenu(win) {
-  return Menu.buildFromTemplate([
-    {
-      label: '播放',
-      click() {
-        win.webContents.send('play');
+  const updateDockMenu = () => {
+    var template = [
+      {
+        label: isPlaying ? '暂停' : '播放',
+        click() {
+          win.webContents.send('play');
+        },
       },
-    },
-    { type: 'separator' },
-    {
-      label: '下一首',
-      click() {
-        win.webContents.send('next');
+      { type: 'separator' },
+      {
+        label: '下一首',
+        click() {
+          win.webContents.send('next');
+        },
       },
-    },
-    {
-      label: '上一首',
-      click() {
-        win.webContents.send('previous');
+      {
+        label: '上一首',
+        click() {
+          win.webContents.send('previous');
+        },
       },
-    },
-  ]);
-}
-const contextMenu = Menu.buildFromTemplate([
-  {
-    label: '播放',
-    click: () => {
-      // 播放音乐
-    },
-  },
-  {
-    label: '暂停',
-    click: () => {
-      // 暂停音乐
-    },
-  },
-  {
-    label: '下一首',
-    click: () => {
-      // 退出应用
-      app.quit();
-    },
-  },
-]);
-app.whenReady().then(() => {
-  Tray = new Tray(path.join(__dirname, 'tray-icon.png'));
+    ];
+    let dockMenu = Menu.buildFromTemplate(template);
+    if (dockMenu && app.dock) app.dock.setMenu(dockMenu);
+  };
+  updateDockMenu();
 
-  // 设置 Tray 的菜单
-  Tray.setContextMenu(contextMenu);
-});
+  ipcMain.on('updateTrayPlayState', (_, playing) => {
+    isPlaying = playing;
+    updateDockMenu();
+  });
+}

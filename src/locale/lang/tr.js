@@ -23,6 +23,7 @@ export default {
   },
   library: {
     sLibrary: "'in Kütüphanesi",
+    playCurrentTrack: 'şu anki şarkıyı çal',
     likedSongs: 'Beğenilen Müzikler',
     sLikedSongs: "'in Beğendiği Müzikler",
     playlists: 'Çalma Listeleri',
@@ -102,7 +103,7 @@ export default {
     loginWithPhone: 'Phone ile giriş yap',
     notice: `YesPlayMusic hesabınızın hiçbir bilgisini kaydetmeyeceğine dair söz veriyor<br />
       Şifren MD5 şifreleme ile yerel olarak şifrelenir ve daha sonra NetEase Müzik API'sine gönderilir<br />
-      YesPlayMusic, NetEase Music'in resmi websitesi değildir, lütfen hesap bilgilerinizi girmeden önce dikkatlice düşününüz. Aynı zamanda, Kendi NetEase Musix API'nızı host etmek için <a href="https://github.com/stark81/YesPlayMusic">YesPlayMusic'in GitHub Repo'suna</a> gidebilirsiniz.`,
+      YesPlayMusic, NetEase Music'in resmi websitesi değildir, lütfen hesap bilgilerinizi girmeden önce dikkatlice düşününüz. Aynı zamanda, Kendi NetEase Musix API'nızı host etmek için <a href="https://github.com/stark81/my_yesplaymusic">YesPlayMusic'in GitHub Repo'suna</a> gidebilirsiniz.`,
     noticeElectron: `YesPlayMusic hesabınızın hiçbir bilgisini kaydetmeyeceğine dair söz veriyor<br />
       Şifren MD5 şifreleme ile yerel olarak şifrelenir ve daha sonra NetEase Müzik API'sine gönderilir<br />`,
   },
@@ -125,6 +126,7 @@ export default {
     pause: 'Durdur',
     mute: 'Sesi kapat',
     nextUp: 'Sıradaki',
+    osdLyrics: 'Masaüstü Şarkı Sözleri',
   },
   modal: {
     close: 'Kapat',
@@ -171,7 +173,12 @@ export default {
     automaticallyCacheSongs: 'Müzikleri otomatik çerezle',
     clearSongsCache: 'Müzik çerezlerini temizle',
     cacheCount: 'Çerezlenen {song} Müzikler ({size})',
-    showLyricsTranslation: 'Sözleri çeviri ve fonetik telaffuz göster',
+    showLyricsTranslation: {
+      text: 'Sözleri çeviri ve fonetik telaffuz göster',
+      never: 'Hiçbir zaman',
+      tlyric: 'çeviri',
+      rlyric: 'Fonetik çeviri',
+    },
     showTray: 'Bildirim alanı simgesini göster',
     showControl: 'Kontrol düğmelerini göster',
     showStatusBarLyric: 'Durum çubuğu şarkı sözlerini göster',

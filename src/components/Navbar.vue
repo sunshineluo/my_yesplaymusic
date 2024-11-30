@@ -34,7 +34,12 @@
       </div>
       <div class="right-part">
         <div class="search-box">
-          <div class="container" :class="{ active: inputFocus }">
+          <SearchBox
+            ref="searchInput"
+            :placeholder="$t('nav.search')"
+            @keydownEnter="doSearch($event)"
+          />
+          <!-- <div class="container" :class="{ active: inputFocus }">
             <svg-icon icon-class="search" />
             <div class="input">
               <input
@@ -47,7 +52,7 @@
                 @blur="inputFocus = false"
               />
             </div>
-          </div>
+          </div> -->
         </div>
         <img
           class="avatar"
@@ -87,6 +92,7 @@ import Win32Titlebar from '@/components/Win32Titlebar.vue';
 import LinuxTitlebar from '@/components/LinuxTitlebar.vue';
 import ContextMenu from '@/components/ContextMenu.vue';
 import ButtonIcon from '@/components/ButtonIcon.vue';
+import SearchBox from '@/components/SearchBox.vue';
 
 export default {
   name: 'Navbar',
@@ -95,12 +101,11 @@ export default {
     LinuxTitlebar,
     ButtonIcon,
     ContextMenu,
+    SearchBox,
   },
   data() {
     return {
-      inputFocus: false,
       langs: ['zh-CN', 'zh-TW', 'en', 'tr'],
-      keywords: '',
       enableWin32Titlebar: false,
       enableLinuxTitlebar: false,
     };
@@ -137,17 +142,17 @@ export default {
       if (where === 'back') this.$router.go(-1);
       else this.$router.go(1);
     },
-    doSearch() {
-      if (!this.keywords) return;
+    doSearch(keywords) {
+      if (!keywords) return;
       if (
         this.$route.name === 'search' &&
-        this.$route.params.keywords === this.keywords
+        this.$route.params.keywords === keywords
       ) {
         return;
       }
       this.$router.push({
         name: 'search',
-        params: { keywords: this.keywords },
+        params: { keywords },
       });
     },
     showUserProfileMenu(e) {
@@ -229,6 +234,7 @@ nav.has-custom-titlebar {
 }
 
 .navigation-links {
+  margin-right: 12vh;
   flex: 1;
   display: flex;
   justify-content: center;
@@ -240,13 +246,13 @@ nav.has-custom-titlebar {
     font-weight: 700;
     text-decoration: none;
     border-radius: 6px;
-    padding: 6px 10px;
+    padding: 6px;
     color: var(--color-text);
     transition: 0.2s;
     -webkit-user-drag: none;
     margin: {
-      right: 12px;
-      left: 12px;
+      right: 6px;
+      left: 6px;
     }
     &:hover {
       background: var(--color-secondary-bg-for-transparent);

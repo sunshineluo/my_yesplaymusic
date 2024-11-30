@@ -41,7 +41,7 @@
           <span v-if="isAlbum" class="featured">
             <ArtistsInLine
               :artists="track.ar"
-              :exclude="$parent.albumObject.artist.name"
+              :exclude="albumObject.artist.name"
               prefix="-"
           /></span>
           <span v-if="isAlbum && track.mark === 1318912" class="explicit-symbol"
@@ -61,10 +61,12 @@
     </div>
 
     <div v-if="showAlbumName" class="album">
-      <router-link v-if="album && album.id" :to="`/album/${album.id}`">{{
-        album.name
-      }}</router-link>
-      <div></div>
+      <router-link
+        v-if="album && album.matched !== false"
+        :to="`/album/${album.id}`"
+        >{{ album.name }}</router-link
+      >
+      <div v-else>{{ album.name }}</div>
     </div>
 
     <div v-if="showTrackTime" class="createTime">
@@ -79,17 +81,14 @@
         <svg-icon
           icon-class="heart"
           :style="{
-            visibility:
-              focus && !isLiked && !(track.isLocal || false)
-                ? 'visible'
-                : 'hidden',
+            visibility: focus && !isLiked ? 'visible' : 'hidden',
           }"
         ></svg-icon>
         <svg-icon v-show="isLiked" icon-class="heart-solid"></svg-icon>
       </button>
     </div>
     <div v-if="showTrackTime && showTrackID" class="time">
-      {{ (track.onlineTrack && track.onlineTrack.id) || track.id }}
+      {{ track.id }}
     </div>
     <div v-if="showTrackTime && !showTrackID" class="time">
       {{ track.dt | formatTime }}
@@ -102,7 +101,7 @@
 <script>
 import ArtistsInLine from '@/components/ArtistsInLine.vue';
 import ExplicitSymbol from '@/components/ExplicitSymbol.vue';
-import { mapState } from 'vuex';
+import { mapActions, mapState } from 'vuex';
 import { isNil } from 'lodash';
 
 export default {
@@ -110,11 +109,21 @@ export default {
   components: { ArtistsInLine, ExplicitSymbol },
 
   props: {
-    trackProp: Object,
-    trackNo: Number,
+    trackProp: { type: Object, default: () => {} },
+    trackNo: { type: Number, default: 0 },
     batchOp: {
       type: Boolean,
       default: false,
+    },
+    albumObject: {
+      type: Object,
+      default: () => {
+        return { artist: { name: '' } };
+      },
+    },
+    type: {
+      type: String,
+      default: 'tracklist',
     },
     highlightPlayingTrack: {
       type: Boolean,
@@ -126,7 +135,7 @@ export default {
     return {
       hover: false,
       trackStyle: {},
-      isSelected: false,
+      // isSelected: false,
     };
   },
 
@@ -137,6 +146,20 @@ export default {
         ? this.trackProp.simpleSong
         : this.trackProp;
     },
+    isSelected: {
+      get() {
+        return this.$parent.selectedList.includes(this.track?.id);
+      },
+      set(val) {
+        if (val) {
+          this.$parent.selectedList.push(this.track?.id);
+        } else {
+          this.$parent.selectedList = this.$parent.selectedList.filter(
+            id => id !== this.track?.id
+          );
+        }
+      },
+    },
     playable() {
       return this.track?.privilege?.pl > 0 || this.track?.playable;
     },
@@ -145,7 +168,10 @@ export default {
         this.track?.al?.picUrl ??
         this.track?.album?.picUrl ??
         'https://p2.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg';
-      return image + '?param=224y224';
+      image += '?param=64y64';
+      return this.track?.matched !== false
+        ? image
+        : `atom://get-pic/${this.track?.filePath}`;
     },
     artists() {
       const { ar, artists } = this.track;
@@ -160,20 +186,17 @@ export default {
       let tn = undefined;
       if (
         this.track?.tns?.length > 0 &&
-        this.track.name !== this.track.tns[0]
+        this.track.name !== this.track?.tns[0]
       ) {
         tn = this.track.tns[0];
       }
 
       //优先显示alia
       if (this.$store.state.settings.subTitleDefault) {
-        return this.track?.alia?.length > 0 ? this.track.alia[0] : tn;
+        return this.track?.alia?.length > 0 ? this.track?.alia[0] : tn;
       } else {
-        return tn === undefined ? this.track.alia[0] : tn;
+        return tn === undefined ? this.track?.alia[0] : tn;
       }
-    },
-    type() {
-      return this.$parent.type;
     },
     isAlbum() {
       return this.type === 'album';
@@ -181,7 +204,7 @@ export default {
     isSubTitle() {
       return (
         (this.track?.tns?.length > 0 &&
-          this.track.name !== this.track.tns[0]) ||
+          this.track.name !== this.track?.tns[0]) ||
         this.track.alia?.length > 0
       );
     },
@@ -189,16 +212,10 @@ export default {
       return this.type === 'playlist';
     },
     isLiked() {
-      return (
-        this.$parent.liked.songs.includes(this.track?.id) ||
-        this.$parent.liked.songs.includes(this.track?.onlineTrack?.id)
-      );
+      return this.$parent.liked?.songs.includes(this.track?.id);
     },
     isPlaying() {
-      return (
-        this.$store.state.player.currentTrack.id === this.track?.id ||
-        this.$store.state.player.currentTrack.id === this.track?.onlineTrack?.id
-      );
+      return this.$store.state.player.currentTrack.id === this.track?.id;
     },
     trackClass() {
       let trackClass = [this.type];
@@ -210,7 +227,9 @@ export default {
       return trackClass;
     },
     isMenuOpened() {
-      return this.$parent.rightClickedTrack.id === this.track.id ? true : false;
+      return this.$parent.rightClickedTrack
+        ? this.$parent.rightClickedTrack.id === this.track?.id
+        : false;
     },
     focus() {
       return (
@@ -244,21 +263,30 @@ export default {
   },
 
   methods: {
+    ...mapActions(['showToast']),
     goToAlbum() {
       if (this.track.al.id === 0) return;
-      this.$router.push({ path: '/album/' + this.track.al.id });
+      this.$router.push({ path: '/album/' + this.track?.al?.id });
     },
     playTrack() {
-      this.$parent.playThisList(this.track.id);
+      this.$parent.playThisList(this.track?.id);
     },
     likeThisSong() {
-      this.$parent.likeATrack(this.track.id);
+      if (this.track?.isLocal && !this.track?.matched) {
+        this.showToast('本地歌曲，无法操作');
+        return;
+      }
+      this.$parent.likeATrack(this.track?.id);
     },
     getPublishTime(date) {
       date = new Date(date);
-      const year = date.getFullYear();
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
+      const year = isNaN(date.getFullYear()) ? '1970' : date.getFullYear();
+      const month = isNaN(date.getMonth())
+        ? '01'
+        : (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = isNaN(date.getDate())
+        ? '01'
+        : date.getDate().toString().padStart(2, '0');
       return date === 0 ? null : `${year}-${month}-${day}`;
     },
   },

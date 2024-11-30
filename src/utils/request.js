@@ -46,13 +46,12 @@ service.interceptors.request.use(function (config) {
   if (['HTTP', 'HTTPS'].includes(proxy.protocol)) {
     config.params.proxy = `${proxy.protocol}://${proxy.server}:${proxy.port}`;
   }
-
   return config;
 });
 
 service.interceptors.response.use(
   response => {
-    const res = response.data;
+    const res = response.data ?? response.body;
     return res;
   },
   async error => {

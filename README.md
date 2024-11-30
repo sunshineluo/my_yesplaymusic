@@ -19,10 +19,24 @@
 [![Library][library-screenshot]](https://music.qier222.com)
 
 ==========================================================================
+## 推广
+- 本项目使用低版本的node、低版本electron，导致某些功能，如Linux下的桌面歌词体验不佳；
+- 本地音乐的匹配问题。项目集成的express + NeteaseCloudMusicApi无法使用search_match这个API(本地音乐匹配线上信息)，每次使用都只显示参数错误，导致本项目的本地歌曲只能使用“搜索 + 筛选”的方式(该方式增加搜索间隔来避免搜索功能被封)来进行匹配，效率低下；
+- 更新API的依赖后，由于未知bug导致掉登陆，即登陆后几分钟内便会自动登出（自动登出不会导致封号）；
+- 基于以上几个原因，在解决掉登陆的问题之前，本人将暂停本项目的更新，转而维护自己开发的另一个项目：[VutronMusic](https://github.com/stark81/VutronMusic)。其他用户如果发现本项目掉登陆的原因，请提issue或者pull request，本人会尽快更新处理。
+  - 该项目使用vue3 + ts + better-sqlite3 + fastify + pinia + electron32+进行开发，且可快速进行electron版本更新，以保障用户体验；
+  - 该项目暂时仅支持客户端，不会像YesPlayMusic一样支持web端，因此无法实现Vercel部署、服务器部署等功能。如果需要可以自行fork后进行修改；
+  - UI界面和功能大量【参考和复用】[YesPlayMusic](https://github.com/qier222/YesPlayMusic)，延续了YesPlayMusic的美观和优雅；
+  - 对本地音乐的支持更为强大，包括但不限于：①支持读取本地歌曲内嵌歌词、封面、音量平衡信息等；②离线歌单封面支持读取本地歌曲内嵌封面；③使用匹配API进行歌曲匹配，匹配结果快速准确；等等。
+  - 使用虚拟列表以减少内存占用、提高性能；
+  - UnblockNeteaseMusic解锁更为稳定；
+  - 等等。
+
 ## 特性✨
  - 新增歌曲评论功能，包括：查看评论、发表评论、回复评论、点赞等。注：因未对歌曲本身进行校验，因此可能会出现评论失败的情况(且没有失败提示)；
  - 针对Mac系统，增加了状态栏歌词显示，包括：独立控制歌词、控制按钮等显示；
- - 新增本地歌词播放功能，包括：①本地歌曲扫描、播放、在线匹配封面、歌词等；②离线歌单功能等；(如果播放器出现问题，可以进入开发者模式，使用resetPlayer()重置播放器状态)；
+ - 新增了桌面歌词功能；
+ - 新增本地歌词播放功能，包括：①本地歌曲扫描、播放、在线匹配封面、歌词等；②离线歌单功能等；
 ## 说明
  - 在本仓库的wiki中新增了部分功能简介，以及播放器异常的处理；
  - 此版本在YesPlayMusic[官方代码](https://github.com/qier222/YesPlayMusic/)0.4.7版本进行的功能调整，可直接访问官方仓库获取原版软件；
@@ -30,6 +44,11 @@
  - 当前README内的交流群是原作者所留；
  - 当前代码仅学习使用，请勿用于其他用途。如有侵权，请联系删除。
  - 请按照安装部署章节中的【配置开发环境】进行配置：
+ ## 其他
+ - <font color=orange>M芯片的Mac电脑</font>需要自行打包, 之前打包好的M芯片版本都无法使用。打包的具体步骤参考<font color=orange>《打包客户端》</font>；
+ - 如果M芯片自己打包出来的客户端的状态栏歌词位置偏下的话，可以修改<font color=orange>src/utils/trayCanvas.js</font>代码里最后一个draw()函数的<font color=orange>“this.ctx.fillText(this.lyric.text, x, this.canvas.height / 2 + 1);”</font>里的+1，直接将其删除，或者根据自己的实际情况调整即可；
+ - 自行打包客户端时，请先切换至<font color=orange>0.4.14及以后的代码</font>，或者切换到<font color=orange>0.4.7的代码</font>来安装依赖(中间版本的代码有的依赖版本有问题，会导致依赖安装不上或者打包出来的程序出现bug)，安装依赖后再切换至最新的代码进行打包；
+ - 如果播放器出现问题，可以进入开发者模式，使用<font color=orange>resetPlayer()重置播放器状态</font>。若问题仍未解决，则先在设置里导出本地歌曲信息后再通过开发者模式使用<font color=orange>resetApp()重置软件</font>；
 
 ## 截图
 
@@ -147,7 +166,7 @@ yarn run build
 
 7. 将 `/dist` 目录下的文件上传到你的 Web 服务器
 
-## ⚙️ Docker 部署
+## ⚙️ Docker 部署（Yesplaymusic原版）
 
 1. 构建 Docker Image
 
@@ -167,7 +186,25 @@ docker run -d --name YesPlayMusic -p 80:80 yesplaymusic
 docker-compose up -d
 ```
 
-YesPlayMusic 地址为 `http://localhost`
+YesPlayMusic 地址为 ``
+
+## ⚙️ Docker 部署（适用于由Dnyo666构建的docker版）
+
+1.拉取 Docker Image（可指定版本）
+
+```sh
+docker pull dnyo666/my_yesplaymusic:v0.4.16-3
+```
+
+2.运行Docker（将80端口映射到3001，可自定义）
+
+```sh
+docker run -d --name My_YesPlayMusic -p 3001:80 dnyo666/my_yesplaymusic:v0.4.16-3
+```
+
+3.打开My_YesPlayMusic
+
+浏览器输入：http://localhost:3001 成功进入
 
 ## ⚙️ 部署至 Replit
 
